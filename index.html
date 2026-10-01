@@ -1450,7 +1450,7 @@ function checkoutStep4(sub,shipCost,disc,total,lines){
       <button class="btn primary" style="flex:2;" id="confirmBtn" onclick="confirmOrder()">Confirm order</button>
     </div>`;
 }
-function confirmOrder(){
+async function confirmOrder(){
   const btn = document.getElementById('confirmBtn');
   if(btn.disabled) return;
   btn.disabled = true; btn.textContent = 'Placing order…';
@@ -1474,6 +1474,44 @@ function confirmOrder(){
     subtotal:sub, shippingCost:shipCost, discount:disc, total,
     status:'Pending', createdAt:Date.now(),
   };
+  // Persist the order and its line items in Supabase before clearing the cart.
+  if(window.supabaseClient){
+    try{
+      const customer = order.customer || {};
+      const {data: savedOrder, error: orderError} = await window.supabaseClient
+        .from('orders')
+        .insert({
+          customer_name: customer.name || 'Customer',
+          phone: customer.phone || '',
+          address: [customer.address, customer.city, customer.state, customer.country].filter(Boolean).join(', '),
+          wilaya: customer.state || customer.city || '',
+          total: order.total,
+          status: 'pending'
+        })
+        .select('id')
+        .single();
+      if(orderError) throw orderError;
+      const dbItems = lines.map(l=>({
+        order_id: savedOrder.id,
+        product_id: null,
+        product_name: l.p.name,
+        quantity: l.qty,
+        unit_price: l.unit
+      }));
+      const {error: itemsError} = await window.supabaseClient.from('order_items').insert(dbItems);
+      if(itemsError) throw itemsError;
+      order.databaseId = savedOrder.id;
+    }catch(err){
+      console.error('Supabase order save failed:', err);
+      toast('Could not save order online. Please try again.', 'err');
+      btn.disabled=false; btn.textContent='Confirm order';
+      return;
+    }
+  }else{
+    toast('Database connection is unavailable. Please try again.', 'err');
+    btn.disabled=false; btn.textContent='Confirm order';
+    return;
+  }
   lines.forEach(l=>{ const p = state.products.find(x=>x.id===l.p.id); p.stock -= l.qty; });
   if(disc>0){ const cc = state.coupons.find(x=>x.code===checkoutState.couponCode); if(cc) cc.used = (cc.used||0)+1; }
   state.orders.unshift(order);
