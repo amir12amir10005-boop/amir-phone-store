@@ -1960,9 +1960,16 @@ function setOrderStatus(id,val){
     if(o.items.some(i=>{ const p=prod(i); return p && p.stock < i.qty; })){ toast('Not enough stock to reactivate this order.','err'); render(true); return; }
     o.items.forEach(i=>{ const p=prod(i); if(p) p.stock -= i.qty; });
   }
-  o.status = val; persist(); toast('Order updated','ok');
+  o.status = val; persist();
+  try{
+    if(window.supabaseClient && await supabaseIsOwner()){
+      const {error}=await window.supabaseClient.from('orders').update({status:val}).eq('id',o.databaseId||o.id);
+      if(error) throw error;
+    }
+    toast('Order updated online','ok');
+  }catch(e){ toast('Order updated locally only','err'); }
 }
-function setOrderPayment(id,val){ const o=state.orders.find(x=>x.id===id); o.payment.status=val; persist(); toast('Payment status updated','ok'); }
+function setOrderPayment(id,val){ const o=state.orders.find(x=>x.id===id); o.payment.status=val; persist(); toast('Payment status updated locally','ok'); }
 function viewOrderModal(id){
   const o = state.orders.find(x=>x.id===id);
   openModal(`<h3 style="margin:0 0 12px;font-size:1.1rem;">Order #${o.id}</h3>
@@ -2321,7 +2328,8 @@ async function changeProductImage(id, input){
     const p = state.products.find(x=>x.id===id);
     p.images = [data].concat((p.images||[]).slice(1));
     if(!persist()){ state = JSON.parse(snap); toast('Storage is full — use smaller images.','err'); return; }
-    toast('Image updated','ok'); render(true);
+    try{ await saveProductToSupabase(p); toast('Image updated online','ok'); }catch(e){ toast('Image saved locally only','err'); }
+    render(true);
   }catch(e){ imgErr(e); }
 }
 
