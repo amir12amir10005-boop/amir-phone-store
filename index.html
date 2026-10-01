@@ -564,7 +564,7 @@ async function publishSite(){
     else toast('Publishing failed. Try again.','err');
   }
 }
-function ownerOnlyView(){ return `<div class="container"><div class="empty">This area is for the store owner only.<div><button class="btn primary" onclick="nav('/home')">Back home</button></div></div></div>`; }
+function renderAdminLoginGuard(){ document.body.classList.remove('admin-mode'); const m=matchRoute('/admin/login'); const app=document.getElementById('app'); app.innerHTML=m ? m.handler(m.params, {}) : ownerOnlyView(); }\nfunction ownerOnlyView(){ return `<div class="container"><div class="empty">This area is for the store owner only.<div><button class="btn primary" onclick="nav('/home')">Back home</button></div></div></div>`; }
 const waNumber = ()=> String((state.settings&&state.settings.whatsapp)||'213667883670').replace(/\D/g,'');
 function waLink(o){
   const ar = state.lang==='ar';
@@ -626,8 +626,15 @@ function render(keepScroll){
     const appEl = document.getElementById('app');
     if(!OWNER_READY){ appEl.innerHTML = '<div class="container"><div class="empty">Checking access…</div></div>'; return; }
     if(!IS_OWNER){ document.body.classList.remove('admin-mode'); appEl.innerHTML = ownerOnlyView(); return; }
+    if(path==='/admin/login'){ renderAdminLoginGuard(); return; }
+    if(!window.supabaseClient){ appEl.innerHTML = ownerOnlyView(); return; }
+    const {data:{user}} = await window.supabaseClient.auth.getUser();
+    if(!user || (user.email||'').toLowerCase() !== ADMIN_EMAIL){
+      state.adminAuth = false;
+      appEl.innerHTML = ownerOnlyView().replace('This area is for the store owner only.','Admin login required.');
+      return;
+    }
     state.adminAuth = true;
-    if(path==='/admin/login'){ nav('/admin'); return; }
   }
   document.body.classList.toggle('admin-mode', path.startsWith('/admin'));
   const m = matchRoute(path);
@@ -1555,23 +1562,36 @@ function notFoundView(){ return `<div class="container"><div class="empty">Page 
 /* =========================================================================
    ADMIN
    ========================================================================= */
+const ADMIN_EMAIL = 'amir.phone.35dz@gmail.com';
 route('/admin/login', ()=>{
   setTitle('Admin login');
   return `<div class="container" style="max-width:380px;padding-top:60px;">
     <h1 style="font-size:1.3rem;margin:0 0 6px;">Admin sign in</h1>
-    <div style="font-size:.78rem;color:var(--ink-dim);margin-bottom:20px;">Demo authentication — any password signs in. Wire this to real auth in production.</div>
-    <div class="field"><label>Email</label><input id="al_user" value="admin@amirphone.example"></div>
-    <div class="field"><label>Password</label><input id="al_pass" type="password" placeholder="Any value works in this demo"></div>
+    <div style="font-size:.78rem;color:var(--ink-dim);margin-bottom:20px;">Only the store owner can access this area.</div>
+    <div class="field"><label>Email</label><input id="al_user" type="email" value="${ADMIN_EMAIL}" autocomplete="username"></div>
+    <div class="field"><label>Password</label><input id="al_pass" type="password" autocomplete="current-password"></div>
+    <div id="al_err" style="color:var(--bad);font-size:.82rem;margin-bottom:10px;"></div>
     <button class="btn primary block" onclick="adminLogin()">Sign in</button>
   </div>`;
 });
-function adminLogin(){
+async function adminLogin(){
+  const email = document.getElementById('al_user').value.trim().toLowerCase();
   const pass = document.getElementById('al_pass').value;
-  if(!pass){ toast('Enter a password.', 'err'); return; }
+  const err = document.getElementById('al_err');
+  if(email !== ADMIN_EMAIL){ err.textContent='This account is not authorized.'; return; }
+  if(!pass){ err.textContent='Enter your password.'; return; }
+  if(!window.supabaseClient){ err.textContent='Authentication service unavailable.'; return; }
+  const {data,error}=await window.supabaseClient.auth.signInWithPassword({email,password:pass});
+  if(error || !data?.user || data.user.email.toLowerCase() !== ADMIN_EMAIL){
+    err.textContent='Incorrect email or password.'; return;
+  }
   state.adminAuth = true; persist();
   nav('/admin');
 }
-function adminLogout(){ state.adminAuth = false; persist(); nav('/home'); }
+async function adminLogout(){
+  if(window.supabaseClient) await window.supabaseClient.auth.signOut();
+  state.adminAuth = false; persist(); nav('/home');
+}
 
 function adminShell(active, bodyHtml){
   const links = [['/admin','Overview'],['/admin/products','Products'],['/admin/categories','Categories'],['/admin/orders','Orders'],['/admin/coupons','Coupons'],['/admin/settings','Settings']];
