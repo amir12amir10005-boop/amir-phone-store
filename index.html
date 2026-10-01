@@ -509,6 +509,94 @@ if(!state.settings.dzd){
 }
 function persist(){ return saveDB(state); }
 
+/* ---------- Supabase store synchronization ---------- */
+const ADMIN_EMAIL = 'amir.phone.35dz@gmail.com';
+
+function dbProductFromLocal(p){
+  return {
+    id: (p.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(p.id)) ? p.id : crypto.randomUUID(),
+    name: p.name || 'Product',
+    description: p.description || '',
+    price: Number(p.price)||0,
+    image_url: (p.images && p.images[0]) || '',
+    category: p.category || 'other',
+    stock: Math.max(0, Number(p.stock)||0),
+    is_active: p.visible !== false
+  };
+}
+function localProductFromDb(p){
+  const old = state && state.products ? state.products.find(x=>x.id===p.id) : null;
+  return {
+    id:p.id, name:p.name||'', nameAr:old?.nameAr||'', descAr:old?.descAr||'',
+    brand:old?.brand||'Baiga', category:p.category||'other', kind:old?.kind||'generic',
+    price:Number(p.price)||0, discountPrice:old?.discountPrice||null, stock:Number(p.stock)||0,
+    sku:old?.sku||('DB-'+p.id.slice(0,8)), rating:old?.rating||4.5,
+    description:p.description||'', specs:old?.specs||[], features:old?.features||[],
+    featured:old?.featured||false, isNew:old?.isNew||false, visible:p.is_active!==false,
+    images:p.image_url?[p.image_url]:[], reviewCount:old?.reviewCount||0, model3d:true,
+    slug:old?.slug||slugify(p.name||'product','product')+'-'+p.id.slice(0,6),
+    createdAt:p.created_at?new Date(p.created_at).getTime():Date.now()
+  };
+}
+async function supabaseIsOwner(){
+  if(!window.supabaseClient) return false;
+  const {data:{user}} = await window.supabaseClient.auth.getUser();
+  return !!user && (user.email||'').toLowerCase()===ADMIN_EMAIL;
+}
+async function syncProductsFromSupabase(){
+  if(!window.supabaseClient) return;
+  const {data,error}=await window.supabaseClient.from('products').select('*').order('created_at',{ascending:false});
+  if(error){ console.warn('Supabase products load failed',error); return; }
+  if(data && data.length){
+    state.products = data.map(localProductFromDb);
+    persist();
+  } else if(await supabaseIsOwner() && state.products.length){
+    const rows = state.products.map(dbProductFromLocal);
+    const {data:created,error:insertError}=await window.supabaseClient.from('products').insert(rows).select('*');
+    if(insertError) console.warn('Initial product import failed',insertError);
+    else if(created?.length){ state.products=created.map(localProductFromDb); persist(); }
+  }
+}
+async function saveProductToSupabase(p){
+  if(!window.supabaseClient || !(await supabaseIsOwner())) throw new Error('Admin authentication required.');
+  const row=dbProductFromLocal(p); p.id=row.id;
+  const {data,error}=await window.supabaseClient.from('products').upsert(row,{onConflict:'id'}).select('*').single();
+  if(error) throw error;
+  Object.assign(p, localProductFromDb(data));
+  persist();
+}
+async function deleteProductFromSupabase(id){
+  if(!window.supabaseClient || !(await supabaseIsOwner())) throw new Error('Admin authentication required.');
+  const {error}=await window.supabaseClient.from('products').delete().eq('id',id);
+  if(error) throw error;
+}
+async function syncAdminOrdersFromSupabase(){
+  if(!window.supabaseClient || !(await supabaseIsOwner())) return;
+  const [{data:orders,error:oerr},{data:items,error:ierr}]=await Promise.all([
+    window.supabaseClient.from('orders').select('*').order('created_at',{ascending:false}),
+    window.supabaseClient.from('order_items').select('*')
+  ]);
+  if(oerr||ierr){ console.warn('Supabase orders load failed',oerr||ierr); return; }
+  const byOrder={};
+  (items||[]).forEach(i=>(byOrder[i.order_id]??=[]).push(i));
+  state.orders=(orders||[]).map(o=>({
+    id:o.id, databaseId:o.id,
+    items:(byOrder[o.id]||[]).map(i=>({productId:i.product_id,name:i.product_name,qty:i.quantity,price:Number(i.unit_price)||0})),
+    customer:{name:o.customer_name||'',phone:o.phone||'',address:o.address||'',city:'',state:o.wilaya||'',country:''},
+    shipping:{method:'standard',name:'Standard',eta:'3–5 days'},
+    payment:{method:'cod',status:'pending'}, coupon:null, subtotal:Number(o.total)||0,
+    shippingCost:0,discount:0,total:Number(o.total)||0,status:o.status||'Pending',
+    createdAt:o.created_at?new Date(o.created_at).getTime():Date.now()
+  }));
+  persist();
+}
+async function bootSupabaseStore(){
+  if(!window.supabaseClient) return;
+  await syncProductsFromSupabase();
+  if(await supabaseIsOwner()) await syncAdminOrdersFromSupabase();
+  render(true);
+}
+
 /* ---------- Owner-only management + publishing ---------- */
 let IS_OWNER = (typeof window.claude === 'undefined');   // plain local copy = demo mode; published page = verified owner only
 let OWNER_READY = IS_OWNER;
@@ -1669,8 +1757,8 @@ route('/admin/products', ()=>{
     </tr>`).join('')}
     </tbody></table>`);
 });
-function toggleProductVisible(id){ const p=state.products.find(x=>x.id===id); p.visible=!p.visible; persist(); render(true); }
-function duplicateProduct(id){
+async function toggleProductVisible(id){ const p=state.products.find(x=>x.id===id); p.visible=!p.visible; persist(); try{ await saveProductToSupabase(p); toast('Visibility updated online','ok'); }catch(e){ toast('Visibility saved locally only','err'); } render(true); }
+async function duplicateProduct(id){
   const p = state.products.find(x=>x.id===id);
   const stamp = Date.now();
   const copy = JSON.parse(JSON.stringify(p));
@@ -1678,7 +1766,7 @@ function duplicateProduct(id){
   const snap = JSON.stringify(state);
   state.products.push(copy);
   if(!persist()){ state = JSON.parse(snap); toast('Storage is full — use smaller images.','err'); return; }
-  toast('Product duplicated','ok'); render(true);
+  try{ await saveProductToSupabase(copy); toast('Product duplicated online','ok'); }catch(e){ toast('Duplicated locally only','err'); } render(true);
 }
 function confirmDeleteProduct(id){
   const p = state.products.find(x=>x.id===id);
@@ -1689,7 +1777,16 @@ function confirmDeleteProduct(id){
       <button class="btn danger" style="flex:1;" onclick="deleteProduct('${id}')">Delete</button>
     </div>`);
 }
-function deleteProduct(id){ state.products = state.products.filter(x=>x.id!==id); state.cart = state.cart.filter(c=>c.productId!==id); state.wishlist = state.wishlist.filter(w=>w!==id); persist(); closeModal(); toast('Product deleted','ok'); render(true); }
+async function deleteProduct(id){
+  const snap=JSON.stringify(state);
+  try{
+    await deleteProductFromSupabase(id);
+    state.products = state.products.filter(x=>x.id!==id);
+    state.cart = state.cart.filter(c=>c.productId!==id);
+    state.wishlist = state.wishlist.filter(w=>w!==id);
+    persist(); closeModal(); toast('Product deleted online','ok'); render(true);
+  }catch(e){ state=JSON.parse(snap); toast('Could not delete product online.','err'); }
+}
 
 function productForm(existing){
   const p = existing || {id:null,name:'',nameAr:'',descAr:'',brand:'Baiga',category:state.categories[0].slug,kind:'phone',price:0,discountPrice:'',stock:0,sku:'',rating:4.5,description:'',specs:[],features:[],featured:false,isNew:false,visible:true,images:[]};
@@ -1741,7 +1838,7 @@ function refreshAdminImgPrev(){
 }
 route('/admin/products/new', ()=>{ setTitle('Add product'); window.__adminImages=[]; return adminShell('/admin/products', productForm(null)); });
 route('/admin/products/edit/:id', (params)=>{ const p = state.products.find(x=>x.id===params.id); window.__adminImages = ((p&&p.images)||[]).slice(); setTitle('Edit product'); return adminShell('/admin/products', productForm(p)); });
-function saveProduct(id){
+async function saveProduct(id){
   const g = k=>document.getElementById(k).value;
   const name = g('pf_name').trim();
   if(!name){ toast('Product name is required.','err'); return; }
@@ -1773,7 +1870,14 @@ function saveProduct(id){
     state.products.push(data);
   }
   if(!persist()){ state = JSON.parse(snap); toast('Storage is full — use smaller images.','err'); return; }
-  toast(id ? 'Product saved' : 'Product added','ok'); nav('/admin/products');
+  try{
+    await saveProductToSupabase(id ? state.products.find(x=>x.id===id) : data);
+    toast(id ? 'Product saved online' : 'Product added online','ok');
+    nav('/admin/products');
+  }catch(e){
+    console.error(e);
+    toast('Saved locally, but online save failed.','err');
+  }
 }
 
 route('/admin/categories', ()=>{
@@ -2194,20 +2298,20 @@ function adminImgPrevHtml(){
 function setMainAdminImage(i){ const a = window.__adminImages; a.unshift(a.splice(i,1)[0]); refreshAdminImgPrev(); }
 
 /* -- quick edits from the products table -- */
-function quickPrice(id, v){
+async function quickPrice(id, v){
   const p = state.products.find(x=>x.id===id); const n = parseFloat(v);
   if(isNaN(n) || n<0){ toast('Enter a valid price.','err'); return; }
-  p.price = n; persist(); toast('Price updated','ok');
+  p.price = n; persist(); try{ await saveProductToSupabase(p); toast('Price updated online','ok'); }catch(e){ toast('Price saved locally only','err'); }
 }
-function quickSale(id, v){
+async function quickSale(id, v){
   const p = state.products.find(x=>x.id===id);
   if(v===''){ p.discountPrice = null; } else { const n = parseFloat(v); if(isNaN(n)||n<0){ toast('Enter a valid price.','err'); return; } p.discountPrice = n; }
-  persist(); toast('Sale price updated','ok');
+  persist(); try{ await saveProductToSupabase(p); toast('Sale price updated online','ok'); }catch(e){ toast('Sale price saved locally only','err'); }
 }
-function quickStock(id, v){
+async function quickStock(id, v){
   const p = state.products.find(x=>x.id===id); const n = parseInt(v,10);
   if(isNaN(n)||n<0){ toast('Enter a valid price.','err'); return; }
-  p.stock = n; persist(); toast('Stock updated','ok');
+  p.stock = n; persist(); try{ await saveProductToSupabase(p); toast('Stock updated online','ok'); }catch(e){ toast('Stock saved locally only','err'); }
 }
 async function changeProductImage(id, input){
   const f = input.files[0]; input.value=''; if(!f) return;
@@ -2398,5 +2502,6 @@ if(!STORAGE_OK) setTimeout(()=>toast('Private mode: changes will not be kept aft
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase.js"></script>
+<script>window.addEventListener("load",()=>{ if(typeof bootSupabaseStore==="function") bootSupabaseStore(); });</script>
 </body>
 </html>
