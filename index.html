@@ -1383,21 +1383,17 @@ function checkoutStep1(){
       <div class="field"><label>Country</label><input id="cf_country" value="${c.country||''}"></div>
       <div class="field"><label>State / Province</label><input id="cf_state" value="${c.state||''}"></div>
     </div>
-    <div class="row2">
-      <div class="field"><label>City</label><input id="cf_city" value="${c.city||''}"></div>
-      <div class="field"><label>Address</label><input id="cf_addr" value="${c.address||''}"></div>
-    </div>
     <div id="cf_err" style="color:var(--bad);font-size:.82rem;margin-bottom:10px;"></div>
     <button class="btn primary block" onclick="ckNext1()">Continue to shipping</button>`;
 }
 function ckNext1(){
   const g = id=>document.getElementById(id).value.trim();
-  const name=g('cf_name'), phone=g('cf_phone'), email=g('cf_email'), country=g('cf_country'), st=g('cf_state'), city=g('cf_city'), addr=g('cf_addr');
+  const name=g('cf_name'), phone=g('cf_phone'), email=g('cf_email'), country=g('cf_country'), st=g('cf_state');
   const err = document.getElementById('cf_err');
-  if(!name||!phone||!email||!country||!city||!addr){ err.textContent='Please fill in all required fields.'; return; }
+  if(!name||!phone||!email||!country){ err.textContent='Please fill in all required fields.'; return; }
   if(!/^\S+@\S+\.\S+$/.test(email)){ err.textContent='Enter a valid email address.'; return; }
   if(phone.replace(/\D/g,'').length<7){ err.textContent='Enter a valid phone number.'; return; }
-  checkoutState.customer = {name:clean(name),phone:clean(phone),email:clean(email),country:clean(country),state:clean(st),city:clean(city),address:clean(addr)};
+  checkoutState.customer = {name:clean(name),phone:clean(phone),email:clean(email),country:clean(country),state:clean(st),city:'',address:''};
   checkoutState.step=2; render();
 }
 function checkoutStep2(shipCost,sub){
