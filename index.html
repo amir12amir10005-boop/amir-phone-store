@@ -566,7 +566,6 @@ function publishPanel(){
   return `<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:18px;">
     <div style="min-width:220px;flex:1;">
       <div style="font-weight:600;font-size:.9rem;color:${dirty?'var(--warn)':'var(--good)'};">${dirty?'Unpublished changes':'Live site is up to date'}</div>
-      <div style="font-size:.76rem;color:var(--ink-dim);margin-top:2px;">Customers see the catalog from the last publish. Changes you make here stay private until you publish.</div>
     </div>
     ${ART ? `<button class="btn primary" id="pubBtn" onclick="publishSite()" ${dirty?'':'disabled'}>Publish changes</button>` : ``}
   </div>`;
@@ -2002,7 +2001,6 @@ const AR = {
   "Unpublished changes":"تغييرات غير منشورة","Live site is up to date":"الموقع المنشور محدّث",
   "Customers see the catalog from the last publish. Changes you make here stay private until you publish.":"يرى الزبائن آخر نسخة منشورة من المنتجات. تبقى تعديلاتك خاصة بك حتى تضغط نشر.",
   "Publish changes":"نشر التغييرات","Publishing…":"جارٍ النشر…",
-  "Open the published page in claude.ai to publish changes.":"افتح الصفحة المنشورة داخل claude.ai لنشر التغييرات.",
   "This area is for the store owner only.":"هذه المنطقة لصاحب المتجر فقط.","Checking access…":"جارٍ التحقق من الصلاحية…",
   "Send order via WhatsApp":"إرسال الطلب عبر واتساب","WhatsApp number (orders are sent here)":"رقم واتساب (تُرسل الطلبات إليه)",
   "Only the store owner can publish.":"النشر متاح لصاحب المتجر فقط.","Publishing failed. Try again.":"فشل النشر. حاول مرة أخرى.","Too large — use smaller product images.":"الحجم كبير جدًا — استخدم صور منتجات أصغر.",
