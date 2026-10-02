@@ -577,7 +577,7 @@ async function publishSite(){
     else toast('Publishing failed. Try again.','err');
   }
 }
-function ownerOnlyView(){ return `<div class="container"><div class="empty">This area is for the store owner only.<div><button class="btn primary" onclick="nav('/home')">Back home</button></div></div></div>`; }
+function ownerOnlyView(){ return `<div class="container"><div class="empty">This area is for the store owner only.<div><button class="btn primary" onclick="nav('/admin/login')">Sign in as store owner</button> <button class="btn ghost" onclick="nav('/home')">Back home</button></div></div></div>`; }
 const waNumber = ()=> String((state.settings&&state.settings.whatsapp)||'213667883670').replace(/\D/g,'');
 function waLink(o){
   const ar = state.lang==='ar';
@@ -635,13 +635,13 @@ function render(keepScroll){
   const {path, params:qp} = parseHash();
   unmountViewer();
   if(keepScroll!==true) closeAllOverlays();
-  if(path.startsWith('/admin')){
+  if(path.startsWith('/admin') && path!=='/admin/login'){
     const appEl = document.getElementById('app');
     if(!OWNER_READY){ appEl.innerHTML = '<div class="container"><div class="empty">Checking access…</div></div>'; return; }
-    if(!IS_OWNER){ document.body.classList.remove('admin-mode'); appEl.innerHTML = ownerOnlyView(); return; }
+    if(!IS_OWNER){ document.body.classList.remove('admin-mode'); nav('/admin/login'); return; }
     state.adminAuth = true;
-    if(path==='/admin/login'){ nav('/admin'); return; }
   }
+  if(path==='/admin/login' && IS_OWNER){ nav('/admin'); return; }
   document.body.classList.toggle('admin-mode', path.startsWith('/admin'));
   const m = matchRoute(path);
   const app = document.getElementById('app');
@@ -2363,7 +2363,7 @@ document.querySelectorAll('.bn-item').forEach(b=> b.addEventListener('click', ()
 document.getElementById('menuBtn').addEventListener('click', ()=>{
   const items = [
     ['#/home','Home'],['#/shop','Shop'],['#/categories','Categories'],
-    ['#/cart','Cart'],['#/account','Account']
+    ['#/cart','Cart'],['#/account','Account'],['#/admin/login','Store owner sign in']
   ];
   const html = '<div style="display:grid;gap:8px;padding:4px 0;">'+items.map(([href,label])=>'<a href="'+href+'" class="btn ghost block" style="text-align:start;text-decoration:none;" onclick="closeAllOverlays()">'+label+' <span style="float:right;">›</span></a>').join('')+'</div>';
   document.getElementById('sheet').classList.add('side-menu');
