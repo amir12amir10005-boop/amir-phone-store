@@ -1867,24 +1867,34 @@ async function loadAdminOrders(){
   const host=document.getElementById('cloudOrders'); if(!host)return;
   if(!IS_OWNER || !window.amirSupabase){host.textContent='سجّل الدخول بحساب صاحب المتجر لعرض الطلبات.';return;}
   host.textContent='جارٍ تحميل الطلبات…';
-  const {data:orders,error}=await window.amirSupabase.from('orders').select('id,customer_name,phone,address,wilaya,total,status,created_at').order('created_at',{ascending:false});
-  if(error){host.textContent='تعذّر تحميل الطلبات: '+error.message;return;}
-  if(!orders||!orders.length){host.textContent='لا توجد طلبات حتى الآن.';return;}
+  const STATUSES=['pending','confirmed','preparing','shipped','delivered','cancelled'];
   const labels={pending:'قيد الانتظار',confirmed:'مؤكد',preparing:'قيد التحضير',shipped:'تم الشحن',delivered:'تم التسليم',cancelled:'ملغي'};
-  host.innerHTML='<div style="display:grid;gap:12px;">'+orders.map(o=>{
-    const status=String(o.status||'pending').toLowerCase();
-    const opts=STATUSES.map(v=>'<option value="'+v+'" '+(status===v?'selected':'')+'>'+(labels[v]||v)+'</option>').join('');
-    return '<article style="background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;display:grid;gap:10px;">'
-      +'<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;"><strong>طلب #'+o.id.slice(0,8).toUpperCase()+'</strong><span class="pill '+status+'">'+(labels[status]||status)+'</span></div>'
-      +'<div><b>الزبون:</b> '+clean(o.customer_name||'—')+'</div>'
-      +'<div><b>الهاتف:</b> <a href="tel:'+clean(o.phone||'')+'">'+clean(o.phone||'—')+'</a></div>'
-      +'<div><b>العنوان:</b> '+clean([o.address,o.wilaya].filter(Boolean).join('، '))+'</div>'
-      +'<div><b>المجموع:</b> '+money(Number(o.total)||0)+'</div>'
-      +'<div style="font-size:.78rem;color:var(--ink-dim);">'+new Date(o.created_at).toLocaleString('ar-DZ')+'</div>'
-      +'<label style="font-size:.8rem;">تحديث حالة الطلب</label><select aria-label="حالة الطلب" onchange="updateCloudOrderStatus(\''+o.id+'\',this.value)">'+opts+'</select>'
-      +'<a class="btn ghost" style="text-align:center;text-decoration:none;" href="https://wa.me/'+String(o.phone||'').replace(/[^0-9]/g,'')+'?text='+encodeURIComponent('مرحباً، بخصوص طلبك رقم '+o.id.slice(0,8)+'.')+'" target="_blank" rel="noopener">التواصل مع الزبون عبر واتساب</a>'
-      +'</article>';
-  }).join('')+'</div>';
+  try{
+    const {data:orders,error}=await window.amirSupabase.from('orders').select('id,customer_name,phone,address,wilaya,total,status,created_at').order('created_at',{ascending:false});
+    if(error)throw error;
+    if(!orders||!orders.length){host.innerHTML='<div style="padding:18px 0;">لا توجد طلبات حتى الآن.<br><button class="btn ghost sm" style="margin-top:12px" onclick="loadAdminOrders()">تحديث القائمة</button></div>';return;}
+    const ids=orders.map(o=>o.id);
+    const {data:items,itemError}=await window.amirSupabase.from('order_items').select('order_id,product_name,quantity,unit_price').in('order_id',ids);
+    if(itemError)console.warn('Could not load order line items:',itemError.message);
+    const byOrder={};(items||[]).forEach(it=>{(byOrder[it.order_id]||(byOrder[it.order_id]=[])).push(it);});
+    host.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;"><b>عدد الطلبات: '+orders.length+'</b><button class="btn ghost sm" onclick="loadAdminOrders()">تحديث</button></div><div style="display:grid;gap:12px;">'+orders.map(o=>{
+      const status=String(o.status||'pending').toLowerCase();
+      const opts=STATUSES.map(v=>'<option value="'+v+'" '+(status===v?'selected':'')+'>'+(labels[v]||v)+'</option>').join('');
+      const lines=byOrder[o.id]||[];
+      const itemHtml=lines.length?'<div style="background:var(--bg);border-radius:10px;padding:10px;"><b>المنتجات:</b><ul style="margin:8px 0 0;padding-inline-start:20px;">'+lines.map(it=>'<li>'+clean(it.product_name||'منتج')+' × '+Number(it.quantity||1)+' — '+money(Number(it.unit_price)||0)+'</li>').join('')+'</ul></div>':'<div style="color:var(--ink-dim);font-size:.82rem;">لا توجد تفاصيل منتجات محفوظة لهذا الطلب.</div>';
+      return '<article style="background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;display:grid;gap:10px;">'
+        +'<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;"><strong>طلب #'+o.id.slice(0,8).toUpperCase()+'</strong><span class="pill '+status+'">'+(labels[status]||status)+'</span></div>'
+        +'<div><b>الزبون:</b> '+clean(o.customer_name||'—')+'</div>'
+        +'<div><b>الهاتف:</b> <a href="tel:'+clean(o.phone||'')+'">'+clean(o.phone||'—')+'</a></div>'
+        +'<div><b>العنوان:</b> '+clean([o.address,o.wilaya].filter(Boolean).join('، '))+'</div>'
+        +itemHtml
+        +'<div><b>المجموع:</b> '+money(Number(o.total)||0)+'</div>'
+        +'<div style="font-size:.78rem;color:var(--ink-dim);">'+new Date(o.created_at).toLocaleString('ar-DZ')+'</div>'
+        +'<label style="font-size:.8rem;">تحديث حالة الطلب</label><select aria-label="حالة الطلب" onchange="updateCloudOrderStatus(\''+o.id+'\',this.value)">'+opts+'</select>'
+        +'<a class="btn ghost" style="text-align:center;text-decoration:none;" href="https://wa.me/'+String(o.phone||'').replace(/[^0-9]/g,'')+'?text='+encodeURIComponent('مرحباً، بخصوص طلبك رقم '+o.id.slice(0,8)+'.')+'" target="_blank" rel="noopener">التواصل مع الزبون عبر واتساب</a>'
+        +'</article>';
+    }).join('')+'</div>';
+  }catch(e){console.error('Loading store orders failed:',e);host.innerHTML='<div style="color:var(--bad);padding:12px 0;">تعذّر تحميل الطلبات: '+clean(e.message||'خطأ غير معروف')+'<br><button class="btn ghost sm" style="margin-top:12px" onclick="loadAdminOrders()">إعادة المحاولة</button></div>';}
 }
 async function updateCloudOrderStatus(id,status){
   if(!IS_OWNER){toast('يجب تسجيل الدخول أولاً.','err');return;}
