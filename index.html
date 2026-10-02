@@ -1817,43 +1817,44 @@ function deleteCategory(slug){
 
 route('/admin/orders', ()=>{
   setTitle('Admin · Orders');
-  const STATUSES = ['Pending','Confirmed','Preparing','Shipped','Delivered','Cancelled'];
-  const PSTATUSES = ['pending','paid','failed','refunded'];
-  return adminShell('/admin/orders', `
-    <h1 style="font-size:1.3rem;margin:0 0 16px;">Orders</h1>
-    <table class="dt"><thead><tr><th>Order</th><th>Customer</th><th>Total</th><th>Status</th><th>Payment</th><th></th></tr></thead><tbody>
-    ${state.orders.length?state.orders.map(o=>`<tr>
-      <td data-label="Order" class="mono">#${o.id}</td>
-      <td data-label="Customer">${o.customer.name}</td>
-      <td data-label="Total">${money(o.total)}</td>
-      <td data-label="Status"><select onchange="setOrderStatus('${o.id}',this.value)">${STATUSES.map(s=>`<option value="${s}" ${o.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
-      <td data-label="Payment"><select onchange="setOrderPayment('${o.id}',this.value)">${PSTATUSES.map(s=>`<option value="${s}" ${o.payment.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
-      <td data-label=""><button class="btn sm ghost" onclick="viewOrderModal('${o.id}')">View</button></td>
-    </tr>`).join(''):'<tr><td colspan="6" style="color:var(--ink-dim);">No orders yet.</td></tr>'}
-    </tbody></table>`);
+  const STATUSES = ['pending','confirmed','preparing','shipped','delivered','cancelled'];
+  // Orders are loaded from the protected Supabase table, not just this browser's cache.
+  const body = `
+    <h1 style="font-size:1.3rem;margin:0 0 8px;">Orders</h1>
+    <p style="font-size:.82rem;color:var(--ink-dim);margin:0 0 16px;">غيّر حالة الطلب عند كل مرحلة، واختر «تم التسليم» بعد وصوله إلى الزبون.</p>
+    <div id="cloudOrders" style="color:var(--ink-dim);padding:16px 0;">Loading orders…</div>`;
+  setTimeout(loadAdminOrders,0);
+  return adminShell('/admin/orders',body);
 });
-function setOrderStatus(id,val){
-  const o = state.orders.find(x=>x.id===id); const was = o.status; if(was===val) return;
-  const prod = i=>state.products.find(x=>x.id===i.productId);
-  if(val==='Cancelled'){ o.items.forEach(i=>{ const p=prod(i); if(p) p.stock += i.qty; }); }
-  else if(was==='Cancelled'){
-    if(o.items.some(i=>{ const p=prod(i); return p && p.stock < i.qty; })){ toast('Not enough stock to reactivate this order.','err'); render(true); return; }
-    o.items.forEach(i=>{ const p=prod(i); if(p) p.stock -= i.qty; });
-  }
-  o.status = val; persist(); toast('Order updated','ok');
+async function loadAdminOrders(){
+  const host=document.getElementById('cloudOrders'); if(!host)return;
+  if(!IS_OWNER || !window.amirSupabase){host.textContent='سجّل الدخول بحساب صاحب المتجر لعرض الطلبات.';return;}
+  host.textContent='جارٍ تحميل الطلبات…';
+  const {data:orders,error}=await window.amirSupabase.from('orders').select('id,customer_name,phone,address,wilaya,total,status,created_at').order('created_at',{ascending:false});
+  if(error){host.textContent='تعذّر تحميل الطلبات: '+error.message;return;}
+  if(!orders||!orders.length){host.textContent='لا توجد طلبات حتى الآن.';return;}
+  const labels={pending:'قيد الانتظار',confirmed:'مؤكد',preparing:'قيد التحضير',shipped:'تم الشحن',delivered:'تم التسليم',cancelled:'ملغي'};
+  host.innerHTML='<div style="display:grid;gap:12px;">'+orders.map(o=>{
+    const status=String(o.status||'pending').toLowerCase();
+    const opts=STATUSES.map(v=>'<option value="'+v+'" '+(status===v?'selected':'')+'>'+(labels[v]||v)+'</option>').join('');
+    return '<article style="background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;display:grid;gap:10px;">'
+      +'<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;"><strong>طلب #'+o.id.slice(0,8).toUpperCase()+'</strong><span class="pill '+status+'">'+(labels[status]||status)+'</span></div>'
+      +'<div><b>الزبون:</b> '+clean(o.customer_name||'—')+'</div>'
+      +'<div><b>الهاتف:</b> <a href="tel:'+clean(o.phone||'')+'">'+clean(o.phone||'—')+'</a></div>'
+      +'<div><b>العنوان:</b> '+clean([o.address,o.wilaya].filter(Boolean).join('، '))+'</div>'
+      +'<div><b>المجموع:</b> '+money(Number(o.total)||0)+'</div>'
+      +'<div style="font-size:.78rem;color:var(--ink-dim);">'+new Date(o.created_at).toLocaleString('ar-DZ')+'</div>'
+      +'<label style="font-size:.8rem;">تحديث حالة الطلب</label><select aria-label="حالة الطلب" onchange="updateCloudOrderStatus(\''+o.id+'\',this.value)">'+opts+'</select>'
+      +'<a class="btn ghost" style="text-align:center;text-decoration:none;" href="https://wa.me/'+String(o.phone||'').replace(/[^0-9]/g,'')+'?text='+encodeURIComponent('مرحباً، بخصوص طلبك رقم '+o.id.slice(0,8)+'.')+'" target="_blank" rel="noopener">التواصل مع الزبون عبر واتساب</a>'
+      +'</article>';
+  }).join('')+'</div>';
 }
-function setOrderPayment(id,val){ const o=state.orders.find(x=>x.id===id); o.payment.status=val; persist(); toast('Payment status updated','ok'); }
-function viewOrderModal(id){
-  const o = state.orders.find(x=>x.id===id);
-  openModal(`<h3 style="margin:0 0 12px;font-size:1.1rem;">Order #${o.id}</h3>
-    <div style="font-size:.85rem;color:var(--ink-dim);margin-bottom:10px;">${new Date(o.createdAt).toLocaleString()}</div>
-    ${o.items.map(i=>`<div style="display:flex;justify-content:space-between;font-size:.85rem;padding:5px 0;"><span>${i.name} × ${i.qty}</span><span>${money(i.price*i.qty)}</span></div>`).join('')}
-    <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px;font-size:.85rem;">
-      <div>${o.customer.name} · ${o.customer.phone}</div>
-      <div style="color:var(--ink-dim);">${o.customer.address}, ${o.customer.city}, ${o.customer.country}</div>
-    </div>
-    <div style="text-align:right;font-weight:600;margin-top:10px;">${money(o.total)}</div>
-    <button class="btn ghost block" style="margin-top:14px;" onclick="closeModal()">Close</button>`);
+async function updateCloudOrderStatus(id,status){
+  if(!IS_OWNER){toast('يجب تسجيل الدخول أولاً.','err');return;}
+  const {error}=await window.amirSupabase.from('orders').update({status}).eq('id',id);
+  if(error){toast('لم يتم تحديث الطلب: '+error.message,'err');await loadAdminOrders();return;}
+  toast(status==='delivered'?'تم تسجيل الطلب على أنه تم التسليم.':'تم تحديث حالة الطلب.','ok');
+  await loadAdminOrders();
 }
 
 route('/admin/coupons', ()=>{
