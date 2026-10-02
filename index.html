@@ -78,6 +78,11 @@ img{max-width:100%;display:block;}
 .sheet-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line);}
 .sheet-body{overflow-y:auto;padding:16px 18px;flex:1;}
 .sheet-foot{display:flex;gap:10px;padding:14px 18px;padding-bottom:calc(14px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);}
+#sheet.side-menu{left:auto;right:0;top:0;bottom:0;width:min(86vw,360px);max-height:none;border-radius:0;border:1px solid var(--line);transform:translateX(100%);padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);}
+#sheet.side-menu.open{transform:translateX(0);}
+#sheet.side-menu .sheet-handle{display:none;}
+#sheet.side-menu .sheet-head{padding-top:20px;}
+@media(min-width:860px){#sheet.side-menu{left:auto;right:0;width:380px;}}
 
 #searchOverlay{position:fixed;inset:0;z-index:95;background:var(--bg);transform:translateY(100%);transition:transform .25s ease;display:flex;flex-direction:column;}
 #searchOverlay.open{transform:translateY(0);}
@@ -905,6 +910,7 @@ window.addEventListener('resize', ()=>{
 const scrim = document.getElementById('scrim');
 function openScrim(onClose){ scrim.classList.add('open'); scrim.onclick = onClose; document.body.classList.add('lock'); }
 function closeAllOverlays(){
+  document.getElementById('sheet').classList.remove('side-menu');
   document.getElementById('cartDrawer').classList.remove('open');
   document.getElementById('sheet').classList.remove('open');
   document.getElementById('searchOverlay').classList.remove('open');
@@ -2349,6 +2355,7 @@ document.getElementById('menuBtn').addEventListener('click', ()=>{
     ['#/cart','Cart'],['#/account','Account']
   ];
   const html = '<div style="display:grid;gap:8px;padding:4px 0;">'+items.map(([href,label])=>'<a href="'+href+'" class="btn ghost block" style="text-align:start;text-decoration:none;" onclick="closeAllOverlays()">'+label+' <span style="float:right;">›</span></a>').join('')+'</div>';
+  document.getElementById('sheet').classList.add('side-menu');
   openSheet('Menu',html,'',()=>{});
 });
 
