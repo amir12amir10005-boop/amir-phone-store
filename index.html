@@ -1590,7 +1590,7 @@ async function customerAuthSubmit(){
  if(!window.amirSupabase){if(msg)msg.textContent='خدمة تسجيل الدخول غير متاحة حالياً.';return;}
  try{
   if(customerAuthMode==='signup'){
-   const {data,error}=await window.amirSupabase.auth.signUp({email,password}); if(error)throw error;
+   const {data,error}=await window.amirSupabase.auth.signUp({email,password,options:{emailRedirectTo:'https://amir12amir10005-boop.github.io/amir-phone-store/?auth_callback=1'}}); if(error)throw error;
    if(data.session){CUSTOMER_USER=data.user;nav('/home');}
    else if(msg)msg.textContent='تم إنشاء الحساب. تحقق من بريدك الإلكتروني لتأكيده ثم سجّل الدخول.';
   }else{
