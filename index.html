@@ -1568,16 +1568,36 @@ route('/order/:id', (params)=>{
     <button class="btn block" onclick="nav('/shop')">Continue shopping</button>
   </div>`;
 });
+let customerAuthMode='login';
 route('/login', ()=>{
-  setTitle('Sign in');
-  if(CUSTOMER_USER) return '<div class="container"><div class="empty">You are signed in. <button class="btn primary" onclick="nav(\'/home\')">Continue to store</button></div></div>';
-  return '<div class="container" style="max-width:420px;padding-top:50px;">'+'<h1>تسجيل الدخول</h1>'+'<p>سجّل الدخول أولاً لتتمكن من استخدام المتجر وحفظ طلباتك في حسابك.</p>'+'<div class="field"><label>البريد الإلكتروني</label><input id="customer_email" type="email" autocomplete="email" placeholder="name@example.com"></div>'+'<button class="btn primary block" onclick="customerLogin()">إرسال رابط تسجيل الدخول</button><p id="customerAuthMessage" role="status"></p></div>';
+ setTitle('تسجيل الدخول');
+ if(CUSTOMER_USER) return '<div class="container"><div class="empty">أنت مسجل الدخول بالفعل. <button class="btn primary" onclick="nav(\'/home\')">الانتقال إلى المتجر</button></div></div>';
+ return '<div class="container" style="max-width:420px;padding-top:50px;">'+
+ '<h1>حساب العميل</h1><p>استخدم بريدك الإلكتروني وكلمة المرور للدخول أو إنشاء حساب جديد.</p>'+
+ '<div class="field"><label>البريد الإلكتروني</label><input id="customer_email" type="email" autocomplete="email" placeholder="name@example.com"></div>'+
+ '<div class="field"><label>كلمة المرور</label><input id="customer_password" type="password" autocomplete="current-password" placeholder="كلمة المرور (6 أحرف على الأقل)"></div>'+
+ '<button class="btn primary block" onclick="customerAuthSubmit()">'+(customerAuthMode==='login'?'تسجيل الدخول':'إنشاء حساب')+'</button>'+
+ '<button class="btn ghost block" style="margin-top:10px" onclick="toggleCustomerAuth()">'+(customerAuthMode==='login'?'ليس لديك حساب؟ إنشاء حساب':'لديك حساب بالفعل؟ تسجيل الدخول')+'</button>'+
+ '<p id="customerAuthMessage" role="status" style="margin-top:14px"></p></div>';
 });
-async function customerLogin(){
- const email=(document.getElementById('customer_email')?.value||'').trim().toLowerCase(); const msg=document.getElementById('customerAuthMessage');
+function toggleCustomerAuth(){customerAuthMode=customerAuthMode==='login'?'signup':'login';render(true);}
+async function customerAuthSubmit(){
+ const email=(document.getElementById('customer_email')?.value||'').trim().toLowerCase();
+ const password=document.getElementById('customer_password')?.value||'';
+ const msg=document.getElementById('customerAuthMessage');
  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){if(msg)msg.textContent='أدخل بريداً إلكترونياً صحيحاً.';return;}
+ if(password.length<6){if(msg)msg.textContent='يجب أن تتكون كلمة المرور من 6 أحرف على الأقل.';return;}
  if(!window.amirSupabase){if(msg)msg.textContent='خدمة تسجيل الدخول غير متاحة حالياً.';return;}
- try{const {error}=await window.amirSupabase.auth.signInWithOtp({email,options:{emailRedirectTo:'https://amir12amir10005-boop.github.io/amir-phone-store/?auth_callback=1'}});if(error)throw error;if(msg)msg.textContent='تم إرسال رابط الدخول إلى بريدك. افتحه للعودة إلى المتجر.';}catch(e){if(msg)msg.textContent=e.message||'تعذر إرسال رابط الدخول.';}
+ try{
+  if(customerAuthMode==='signup'){
+   const {data,error}=await window.amirSupabase.auth.signUp({email,password}); if(error)throw error;
+   if(data.session){CUSTOMER_USER=data.user;nav('/home');}
+   else if(msg)msg.textContent='تم إنشاء الحساب. تحقق من بريدك الإلكتروني لتأكيده ثم سجّل الدخول.';
+  }else{
+   const {data,error}=await window.amirSupabase.auth.signInWithPassword({email,password});if(error)throw error;
+   CUSTOMER_USER=data.user;nav('/home');
+  }
+ }catch(e){if(msg)msg.textContent=e.message||'تعذر إتمام العملية.';}
 }
 async function customerLogout(){if(window.amirSupabase)await window.amirSupabase.auth.signOut();CUSTOMER_USER=null;nav('/login');}
 
