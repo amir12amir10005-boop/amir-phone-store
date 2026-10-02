@@ -501,7 +501,15 @@ function loadDB(){
   }
   return raw;
 }
-function saveDB(s){ if(!STORAGE_OK) return true; try{ localStorage.setItem(LS_KEY, JSON.stringify(s)); return true; }catch(e){ return false; } }
+function saveDB(s){
+  let ok=true; try{ if(STORAGE_OK) localStorage.setItem(LS_KEY, JSON.stringify(s)); }catch(e){ ok=false; }
+  if(typeof IS_OWNER!=='undefined' && IS_OWNER && window.amirSupabase){
+    const payload={products:s.products||[],categories:s.categories||[],coupons:(s.coupons||[]).map(c=>Object.assign({},c,{used:0})),settings:s.settings||{}};
+    window.__catalogSync=window.__catalogSync||Promise.resolve();
+    window.__catalogSync=window.__catalogSync.then(async()=>{const {error}=await window.amirSupabase.from('store_state').upsert({id:1,payload,updated_at:new Date().toISOString()},{onConflict:'id'});if(error){console.error('Catalog sync failed:',error);toast('Cloud sync failed. Your changes remain on this device.','err');}}).catch(e=>console.error('Catalog sync failed:',e));
+  }
+  return ok;
+}
 let state = loadDB();
 if(!state.lang) state.lang = 'en';
 state.wishlist = state.wishlist||[]; state.recentSearches = state.recentSearches||[]; state.coupons = state.coupons||[]; state.orders = state.orders||[]; state.cart = state.cart||[];
@@ -2363,7 +2371,7 @@ document.getElementById('menuBtn').addEventListener('click', ()=>{
 });
 
 applyLang();
-render();
+(async function bootStore(){try{const {data,error}=await window.amirSupabase.from('store_state').select('payload').eq('id',1).maybeSingle();if(!error&&data?.payload&&Array.isArray(data.payload.products)&&data.payload.products.length){const p=data.payload;state.products=p.products;state.categories=p.categories||state.categories;state.coupons=p.coupons||state.coupons;state.settings=Object.assign({},state.settings,p.settings||{});saveDB(state);}}catch(e){console.warn('Using local catalog cache:',e);}render();})();
 if(!STORAGE_OK) setTimeout(()=>toast('Private mode: changes will not be kept after closing the page.','err'),3000);
 </script>
 </body>
