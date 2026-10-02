@@ -1569,7 +1569,7 @@ async function adminLogin(){
   const email=(document.getElementById('al_user')?.value||'').trim().toLowerCase();
   const msg=document.getElementById('authMessage');
   if(!email){ if(msg)msg.textContent='Enter your email.'; return; }
-  if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)){ if(msg)msg.textContent='أدخل بريداً إلكترونياً صحيحاً.'; return; }
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ if(msg)msg.textContent='أدخل بريداً إلكترونياً صحيحاً.'; return; }
   localStorage.setItem('amir_owner_email',email);
   if(!window.amirSupabase){if(msg)msg.textContent='Secure sign-in is unavailable. Refresh and try again.';return;}
   try{const {error}=await window.amirSupabase.auth.signInWithOtp({email,options:{emailRedirectTo:'https://amir12amir10005-boop.github.io/amir-phone-store/?auth_callback=1',shouldCreateUser:false}});if(error)throw error;if(msg)msg.textContent='Check your inbox and open the sign-in link on this device.';}
