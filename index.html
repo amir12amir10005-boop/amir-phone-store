@@ -998,3 +998,1356 @@ function renderCartDrawer(){
         </div>
       </div>
     </div>`).join('');
+  const sub = cartSubtotal();
+  foot.innerHTML = `
+    <div style="display:flex;justify-content:space-between;margin-bottom:10px;font-size:.9rem;"><span style="color:var(--ink-dim)">Subtotal</span><b>${money(sub)}</b></div>
+    <button class="btn primary block" onclick="closeAllOverlays();nav('/checkout')">Checkout</button>
+    <button class="btn ghost block" style="margin-top:8px;" onclick="closeAllOverlays();nav('/cart')">View full cart</button>`;
+}
+document.getElementById('cartBtn').addEventListener('click', ()=>{ renderCartDrawer(); document.getElementById('cartDrawer').classList.add('open'); openScrim(()=>closeAllOverlays()); });
+document.getElementById('closeCart').addEventListener('click', closeAllOverlays);
+
+/* -- wishlist -- */
+function toggleWishlist(id, el){
+  const i = state.wishlist.indexOf(id);
+  if(i>-1) state.wishlist.splice(i,1); else state.wishlist.push(id);
+  persist();
+  if(el){ el.classList.toggle('active', i===-1); const svg = el.querySelector('svg'); if(svg) svg.setAttribute('fill', i===-1 ? 'currentColor' : 'none'); }
+  else render(true);
+}
+
+/* -- filter sheet -- */
+let sheetApply = ()=>{};
+function openSheet(title, bodyHtml, footHtml, onApply){
+  document.getElementById('sheetTitle').textContent = title;
+  document.getElementById('sheetBody').innerHTML = bodyHtml;
+  document.getElementById('sheetFoot').innerHTML = footHtml;
+  sheetApply = onApply || (()=>{});
+  document.getElementById('sheet').classList.add('open');
+  openScrim(closeAllOverlays);
+}
+document.getElementById('closeSheet').addEventListener('click', closeAllOverlays);
+
+/* -- search overlay -- */
+document.getElementById('searchBtn').addEventListener('click', ()=>{
+  document.getElementById('searchOverlay').classList.add('open');
+  renderSearchBody('');
+  setTimeout(()=>document.getElementById('searchInput').focus(), 50);
+});
+document.getElementById('closeSearch').addEventListener('click', closeAllOverlays);
+document.getElementById('searchInput').addEventListener('input', e=> renderSearchBody(e.target.value));
+document.getElementById('searchInput').addEventListener('keydown', e=>{
+  if(e.key==='Enter' && e.target.value.trim()) commitSearch(e.target.value.trim());
+});
+function commitSearch(q){
+  state.recentSearches = [q, ...state.recentSearches.filter(s=>s!==q)].slice(0,5);
+  persist();
+  closeAllOverlays();
+  nav('/shop?q='+encodeURIComponent(q));
+}
+function renderSearchBody(q){
+  const el = document.getElementById('searchBody');
+  if(!q){
+    el.innerHTML = `
+      ${state.recentSearches.length? `<div style="font-size:.8rem;color:var(--ink-dim);margin-bottom:10px;">Recent searches</div><div class="chipset" style="margin-bottom:22px;">${state.recentSearches.map(s=>`<button class="chip" onclick="commitSearch('${s.replace(/'/g,"")}')">${s}</button>`).join('')}</div>` : ''}
+      <div style="font-size:.8rem;color:var(--ink-dim);margin-bottom:10px;">Popular categories</div>
+      <div class="chipset">${state.categories.filter(c=>c.visible).slice(0,8).map(c=>`<button class="chip" onclick="closeAllOverlays();nav('/category/${c.slug}')">${c.name}</button>`).join('')}</div>`;
+    return;
+  }
+  const ql = q.toLowerCase();
+  const results = visibleProducts().filter(p=> [p.name,p.brand,p.category,p.sku,p.description].join(' ').toLowerCase().includes(ql)).slice(0,20);
+  el.innerHTML = results.length ? results.map(p=>`
+    <div style="display:flex;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer;" onclick="closeAllOverlays();nav('/product/${p.slug}')">
+      <div style="width:44px;height:44px;border-radius:8px;${thumbBg(p)}flex-shrink:0;"></div>
+      <div><div style="font-size:.88rem;">${p.name}</div><div style="font-size:.72rem;color:var(--ink-dim);">${p.brand} · ${money(p.discountPrice||p.price)}</div></div>
+    </div>`).join('') : '<div class="empty">No matches for “'+q+'”.</div>';
+}
+
+/* =========================================================================
+   VIEWS — HOME
+   ========================================================================= */
+route('/home', ()=>{
+  const hero = state.products.find(p=>p.featured && p.visible) || visibleProducts()[0];
+  const cats = state.categories.filter(c=>c.visible);
+  const featured = visibleProducts().filter(p=>p.featured).slice(0,8);
+  setTitle('');
+  return `
+    <div id="viewerWrap" class="hero-viewer" data-viewer="iphone18-burgundy" data-hue="8388640" data-intro="1"></div>
+    <div class="container" style="margin-top:-10px;">
+      <div class="hero-copy" style="text-align:center;padding:0 0 26px;">
+        <div class="crumb" style="justify-content:center;">New this season</div>
+        <h1 style="font-size:clamp(1.7rem,5vw,2.6rem);margin:0 0 8px;">iPhone 18 Pro Max — Burgundy</h1>
+        <p style="color:var(--ink-dim);max-width:46ch;margin:0 auto 14px;">Explore the burgundy 3D phone model. Drag to rotate and view its design.</p>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+          <button class="btn primary" onclick="nav('/shop')">Shop now</button>
+          <button class="btn ghost" onclick="nav('/shop')">Explore products</button>
+        </div>
+      </div>
+      <div class="section">
+        <h2 class="h">Categories</h2>
+        <div class="hscroll">${cats.map(c=>`
+          <a href="#/category/${c.slug}" class="catcard">
+            <div class="sw" style="${catBg(c)}"></div>
+            <div class="cname">${c.name}</div>
+            <div class="ccount">${catCount(c.slug)} products</div>
+          </a>`).join('')}
+        </div>
+      </div>
+      <div class="section">
+        <h2 class="h">Featured</h2>
+        <div class="grid2">${featured.map(productCard).join('')}</div>
+      </div>
+    </div>`;
+});
+
+function productCard(p){
+  const hue = (HUES[p.kind]||0x5aa7ff).toString(16).padStart(6,'0');
+  const wished = state.wishlist.includes(p.id);
+  return `
+    <div class="card" onclick="nav('/product/${p.slug}')">
+      <div class="thumb">
+        <div class="swatch" style="background:radial-gradient(circle at 40% 30%,#${hue},#12141a 75%);"></div>
+        <img src="${pimg(p)}" alt="${p.name}" loading="lazy" decoding="async">
+        ${p.isNew?'<span class="tag new">New</span>':p.discountPrice?'<span class="tag sale">Sale</span>':''}
+        <button class="wish ${wished?'active':''}" onclick="event.stopPropagation();toggleWishlist('${p.id}',this)"><svg viewBox="0 0 24 24" fill="${wished?'currentColor':'none'}" stroke="currentColor" stroke-width="1.8"><path d="M12 21s-7-4.6-9.5-9C.7 8.4 2 5 5.3 5c1.9 0 3.3 1 4.7 2.8C11.4 6 12.8 5 14.7 5 18 5 19.3 8.4 21.5 12 19 16.4 12 21 12 21z"/></svg></button>
+      </div>
+      <div class="info">
+        <div class="brandline">${p.brand}</div>
+        <div class="name">${pname(p)}</div>
+        <div class="stars">${stars(p.rating)}</div>
+        <div class="pricerow">
+          <span class="pnow">${money(p.discountPrice||p.price)}</span>
+          ${p.discountPrice?`<span class="pold">${money(p.price)}</span><span class="pct">-${pctOff(p)}%</span>`:''}
+        </div>
+        <button class="addbtn" ${p.stock<=0?'disabled':''} onclick="event.stopPropagation();addToCart('${p.id}',1,this)">${p.stock<=0?'Out of stock':'Add to cart'}</button>
+      </div>
+    </div>`;
+}
+
+/* -------- SHOP + CATEGORY -------- */
+function applyFiltersSort(list, qp){
+  const q = qp.get('q'); const cat = qp.get('category'); const brand = qp.get('brand');
+  const minP = qp.get('min'); const maxP = qp.get('max'); const rating = qp.get('rating');
+  const sale = qp.get('sale'); const isNew = qp.get('new'); const sort = qp.get('sort')||'newest';
+  let out = list.slice();
+  if(q) out = out.filter(p=> [p.name,p.brand,p.category,p.sku,p.description].join(' ').toLowerCase().includes(q.toLowerCase()));
+  if(cat) out = out.filter(p=>p.category===cat);
+  if(brand) out = out.filter(p=>p.brand===brand);
+  if(minP) out = out.filter(p=>(p.discountPrice||p.price) >= +minP);
+  if(maxP) out = out.filter(p=>(p.discountPrice||p.price) <= +maxP);
+  if(rating) out = out.filter(p=>p.rating >= +rating);
+  if(sale) out = out.filter(p=>p.discountPrice);
+  if(isNew) out = out.filter(p=>p.isNew);
+  if(sort==='price-asc') out.sort((a,b)=>(a.discountPrice||a.price)-(b.discountPrice||b.price));
+  else if(sort==='price-desc') out.sort((a,b)=>(b.discountPrice||b.price)-(a.discountPrice||a.price));
+  else if(sort==='rating') out.sort((a,b)=>b.rating-a.rating);
+  else if(sort==='discount') out.sort((a,b)=>pctOff(b)-pctOff(a));
+  else if(sort==='popular') out.sort((a,b)=>b.reviewCount-a.reviewCount);
+  else out.sort((a,b)=>b.createdAt-a.createdAt);
+  return out;
+}
+function filterSheetHtml(qp){
+  const cats = state.categories.filter(c=>c.visible);
+  return `
+    <div class="field"><label>Category</label>
+      <div class="chipset">${cats.map(c=>`<button class="chip fchip" data-k="category" data-v="${c.slug}" ${qp.get('category')===c.slug?'style="background:rgba(90,167,255,.14);color:var(--lume);border-color:rgba(90,167,255,.35)"':''}>${c.name}</button>`).join('')}</div>
+    </div>
+    <div class="field"><label>Brand</label>
+      <div class="chipset">${BRANDS.map(b=>`<button class="chip fchip" data-k="brand" data-v="${b}" ${qp.get('brand')===b?'style="background:rgba(90,167,255,.14);color:var(--lume);border-color:rgba(90,167,255,.35)"':''}>${b}</button>`).join('')}</div>
+    </div>
+    <div class="field"><label>Price range</label>
+      <div class="row2"><input id="fmin" type="number" placeholder="Min" value="${qp.get('min')||''}"><input id="fmax" type="number" placeholder="Max" value="${qp.get('max')||''}"></div>
+    </div>
+    <div class="field"><label>Minimum rating</label>
+      <div class="chipset">${[4.5,4,3.5].map(r=>`<button class="chip fchip" data-k="rating" data-v="${r}" ${qp.get('rating')==String(r)?'style="background:rgba(90,167,255,.14);color:var(--lume);border-color:rgba(90,167,255,.35)"':''}>${r}+ ★</button>`).join('')}</div>
+    </div>
+    <div class="check" style="margin-bottom:10px;"><input type="checkbox" id="fsale" ${qp.get('sale')?'checked':''}><label for="fsale">On sale</label></div>
+    <div class="check"><input type="checkbox" id="fnew" ${qp.get('new')?'checked':''}><label for="fnew">New arrivals</label></div>`;
+}
+function bindFilterChips(root){
+  root.querySelectorAll('.fchip').forEach(ch=>{
+    ch.addEventListener('click', ()=>{
+      const active = ch.style.color==='var(--lume)' || ch.style.color==='rgb(90, 167, 255)';
+      root.querySelectorAll(`.fchip[data-k="${ch.dataset.k}"]`).forEach(o=>o.removeAttribute('style'));
+      if(!active) ch.style.cssText='background:rgba(90,167,255,.14);color:var(--lume);border-color:rgba(90,167,255,.35)';
+    });
+  });
+}
+function readSheetFilters(root, base){
+  const qp = new URLSearchParams(base);
+  const active = k => { const el = root.querySelector(`.fchip[data-k="${k}"][style]`); return el? el.dataset.v : null; };
+  ['category','brand','rating'].forEach(k=>{ const v = active(k); if(v) qp.set(k,v); else qp.delete(k); });
+  const min = root.querySelector('#fmin').value, max = root.querySelector('#fmax').value;
+  min? qp.set('min',min) : qp.delete('min');
+  max? qp.set('max',max) : qp.delete('max');
+  root.querySelector('#fsale').checked ? qp.set('sale','1') : qp.delete('sale');
+  root.querySelector('#fnew').checked ? qp.set('new','1') : qp.delete('new');
+  return qp;
+}
+
+function shopView(fixedCategory){
+  return (params, qp) => {
+    const cat = fixedCategory || null;
+    const q2 = new URLSearchParams(qp); if(cat) q2.set('category',cat);
+    let list = applyFiltersSort(visibleProducts(), q2);
+    const catObj = cat ? state.categories.find(c=>c.slug===cat) : null;
+    if(cat && !catObj) return notFoundView();
+    setTitle(catObj? catObj.name : 'Shop');
+    return `
+      ${catObj? `<div class="banner"><div class="container">
+        <div class="crumb"><a href="#/categories">Categories</a> / ${catObj.name}</div>
+        <h1 style="margin:6px 0 4px;font-size:1.6rem;">${catObj.name}</h1>
+        <p style="color:var(--ink-dim);margin:0 0 4px;max-width:60ch;">${catObj.description}</p>
+        <div style="font-size:.8rem;color:var(--ink-dim);">${catCount(catObj.slug)} products</div>
+      </div></div>` : `<div class="container" style="padding-top:18px;"><h1 style="font-size:1.5rem;margin:0 0 12px;">Shop</h1></div>`}
+      <div class="container">
+        <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+          <button class="btn ghost sm" id="openFilter">Filter</button>
+          <select id="sortSel" style="width:auto;padding:8px 12px;border-radius:100px;background:var(--panel2);border:1px solid var(--line);font-size:.8rem;">
+            <option value="newest" ${!qp.get('sort')||qp.get('sort')==='newest'?'selected':''}>Newest</option>
+            <option value="price-asc" ${qp.get('sort')==='price-asc'?'selected':''}>Price: Low to High</option>
+            <option value="price-desc" ${qp.get('sort')==='price-desc'?'selected':''}>Price: High to Low</option>
+            <option value="popular" ${qp.get('sort')==='popular'?'selected':''}>Most Popular</option>
+            <option value="rating" ${qp.get('sort')==='rating'?'selected':''}>Highest Rated</option>
+            <option value="discount" ${qp.get('sort')==='discount'?'selected':''}>Biggest Discount</option>
+          </select>
+          ${qp.get('q')? `<span style="font-size:.8rem;color:var(--ink-dim);">Results for “${qp.get('q')}”</span>`:''}
+        </div>
+        ${list.length? `<div class="grid2">${list.map(productCard).join('')}</div>` : `<div class="empty">No products match these filters.<div><button class="btn ghost" onclick="nav('${cat?'/category/'+cat:'/shop'}')">Reset filters</button></div></div>`}
+      </div>
+      <input type="hidden" id="ctxCat" value="${cat||''}">`;
+  };
+}
+route('/shop', shopView(null));
+route('/category/:slug', (params, qp)=> shopView(params.slug)(params, qp));
+
+route('/categories', ()=>{
+  setTitle('Categories');
+  const cats = state.categories.filter(c=>c.visible);
+  return `<div class="container" style="padding-top:18px;">
+    <h1 style="font-size:1.5rem;margin:0 0 16px;">Categories</h1>
+    <div class="grid2">
+      ${cats.map(c=>`
+        <div class="card" style="cursor:pointer;" onclick="nav('/category/${c.slug}')">
+          <div class="thumb" style="aspect-ratio:1.3/1;"><div class="swatch" style="${catBg(c)}"></div></div>
+          <div class="info">
+            <div class="name" style="font-size:.95rem;">${c.name}</div>
+            <div style="font-size:.75rem;color:var(--ink-dim);margin-bottom:10px;">${catCount(c.slug)} products</div>
+            <button class="addbtn" onclick="event.stopPropagation();nav('/category/${c.slug}')">Explore</button>
+          </div>
+        </div>`).join('')}
+    </div>
+  </div>`;
+});
+
+/* -------- PRODUCT DETAILS -------- */
+route('/product/:slug', (params)=>{
+  const p = findProduct(params.slug);
+  if(!p) return notFoundView();
+  setTitle(p.name);
+  window.__qty = 1; window.__maxQty = p.stock;
+  const cat = catByProduct(p);
+  const related = visibleProducts().filter(x=>x.category===p.category && x.id!==p.id).slice(0,8);
+  const reviews = [
+    {name:'J. Alaoui', rating:5, text:'Exactly as described, arrived fast and feels genuinely premium.'},
+    {name:'M. Renner', rating:4, text:'Great product overall — battery life is a little shorter than advertised.'},
+    {name:'S. Okafor', rating:5, text:'Second one I have bought from Amir Phone. Consistent quality.'},
+  ];
+  return `
+    <div class="container" style="padding-top:14px;">
+      <div class="crumb"><a href="#/shop">Shop</a> / <a href="#/category/${p.category}">${cat?cat.name:p.category}</a> / ${p.name}</div>
+      ${galleryHtml(p)}
+      <div class="brandline" style="margin-bottom:4px;">${p.brand} · ${p.sku}</div>
+      <h1 style="font-size:1.5rem;margin:0 0 6px;">${pname(p)}</h1>
+      <div class="stars" style="font-size:.85rem;margin-bottom:10px;">${stars(p.rating)} <span style="color:var(--ink-dim)">(${p.reviewCount} reviews)</span></div>
+      <div class="pricerow" style="margin-bottom:8px;">
+        <span class="pnow" style="font-size:1.3rem;">${money(p.discountPrice||p.price)}</span>
+        ${p.discountPrice?`<span class="pold">${money(p.price)}</span><span class="pct">-${pctOff(p)}%</span>`:''}
+      </div>
+      <div style="margin-bottom:16px;font-size:.86rem;">${stockLabel(p)}</div>
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button class="btn sm ghost" onclick="stepQty(-1)">−</button>
+          <span class="mono" id="qtyVal">1</span>
+          <button class="btn sm ghost" onclick="stepQty(1)">+</button>
+        </div>
+      </div>
+      <p style="color:var(--ink-dim);line-height:1.6;font-size:.92rem;">${pdesc(p)}</p>
+      ${p.features.length? `<h3 style="font-size:1rem;margin:22px 0 10px;">Features</h3><ul style="padding-left:18px;color:var(--ink-dim);font-size:.88rem;line-height:1.8;margin:0;">${p.features.map(f=>`<li>${f}</li>`).join('')}</ul>`:''}
+      <h3 style="font-size:1rem;margin:22px 0 10px;">Specifications</h3>
+      <div>${p.specs.map(s=>`<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px dashed var(--line);font-size:.86rem;"><span style="color:var(--ink-dim)">${s[0]}</span><span class="mono">${s[1]}</span></div>`).join('')}</div>
+      <h3 style="font-size:1rem;margin:24px 0 10px;">Reviews</h3>
+      ${reviews.map(r=>`<div style="border-bottom:1px solid var(--line);padding:12px 0;"><div style="display:flex;justify-content:space-between;font-size:.85rem;"><b>${r.name}</b><span style="color:var(--warn)">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</span></div><p style="margin:6px 0 0;color:var(--ink-dim);font-size:.85rem;">${r.text}</p></div>`).join('')}
+      ${related.length? `<h3 style="font-size:1rem;margin:24px 0 10px;">Related products</h3><div class="hscroll">${related.map(r=>`<div style="flex:0 0 150px;">${productCard(r)}</div>`).join('')}</div>`:''}
+      <div style="height:20px;"></div>
+    </div>
+    <div class="sticky-buy">
+      <button class="btn ghost" style="flex:1;" ${p.stock<=0?'disabled':''} onclick="addToCart('${p.id}', window.__qty||1, this); ">Add to cart</button>
+      <button class="btn primary" style="flex:1;" ${p.stock<=0?'disabled':''} onclick="if(addToCart('${p.id}', window.__qty||1)) nav('/checkout');">Buy now</button>
+    </div>`;
+});
+window.__qty = 1;
+function stepQty(d){
+  const max = window.__maxQty||99; const n = (window.__qty||1)+d;
+  if(n>max){ toast('Only '+max+' items available.','err'); return; }
+  window.__qty = Math.max(1,n); const el = document.getElementById('qtyVal'); if(el) el.textContent = window.__qty;
+}
+
+/* -------- CART PAGE -------- */
+route('/cart', ()=>{
+  setTitle('Cart');
+  const lines = cartLines();
+  if(!lines.length) return `<div class="container"><div class="empty">Your cart is empty.<div><button class="btn primary" onclick="nav('/shop')">Browse products</button></div></div></div>`;
+  const sub = cartSubtotal();
+  return `<div class="container" style="padding-top:16px;">
+    <h1 style="font-size:1.4rem;margin:0 0 16px;">Your cart</h1>
+    ${lines.map(l=>`
+      <div style="display:flex;gap:12px;padding:14px 0;border-bottom:1px solid var(--line);align-items:center;">
+        <div style="width:64px;height:64px;border-radius:12px;${thumbBg(l.p)}flex-shrink:0;"></div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:500;">${pname(l.p)}</div>
+          <div style="font-size:.78rem;color:var(--ink-dim);">${l.p.brand} · ${money(l.unit)} each</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button class="btn ghost" style="width:38px;height:38px;padding:0;border-radius:50%;" onclick="setCartQty('${l.p.id}',${l.qty-1})">−</button>
+          <span class="mono">${l.qty}</span>
+          <button class="btn ghost" style="width:38px;height:38px;padding:0;border-radius:50%;" onclick="setCartQty('${l.p.id}',${l.qty+1})">+</button>
+        </div>
+        <div style="width:70px;text-align:right;font-weight:500;">${money(l.total)}</div>
+        <button class="iconbtn" style="color:var(--bad);" onclick="setCartQty('${l.p.id}',0)">&times;</button>
+      </div>`).join('')}
+    <div style="margin-top:18px;display:flex;gap:10px;">
+      <input class="field" id="couponInput" value="${checkoutState.couponCode||''}" placeholder="Coupon code" style="flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;">
+      <button class="btn ghost" onclick="applyCouponFromCart()">Apply</button>
+    </div>
+    <div id="couponMsg" style="font-size:.8rem;margin-top:6px;"></div>
+    <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--line);">
+      <div style="display:flex;justify-content:space-between;font-size:.9rem;margin-bottom:6px;"><span style="color:var(--ink-dim)">Subtotal</span><b>${money(sub)}</b></div>
+      <div style="font-size:.78rem;color:var(--ink-dim);margin-bottom:14px;">Shipping and any coupon discount are calculated at checkout.</div>
+      <button class="btn primary block" onclick="nav('/checkout')">Checkout</button>
+      <button class="btn ghost block" style="margin-top:8px;" onclick="nav('/shop')">Continue shopping</button>
+    </div>
+  </div>`;
+});
+function applyCouponFromCart(){
+  const code = document.getElementById('couponInput').value.trim().toUpperCase();
+  const msg = document.getElementById('couponMsg');
+  if(!code){ checkoutState.couponCode = null; msg.textContent=''; return; }
+  const v = validateCoupon(code, cartSubtotal());
+  if(!v.ok){ msg.style.color='var(--bad)'; msg.textContent = v.msg; return; }
+  checkoutState.couponCode = code;
+  msg.style.color='var(--good)'; msg.textContent='Coupon "'+code+'" will be applied at checkout.';
+}
+
+/* =========================================================================
+   CHECKOUT
+   ========================================================================= */
+let checkoutState = { step:1, customer:{}, shipping:{method:'standard',cost:1300,eta:'3–5 days'}, payment:{method:'cod'}, couponCode:null };
+const SHIP_OPTIONS = [
+  {id:'standard', name:'Standard', eta:'3–5 business days', cost:1300},
+  {id:'express', name:'Express', eta:'1–2 business days', cost:2500},
+];
+function couponDiscount(sub){
+  if(!checkoutState.couponCode) return 0;
+  const v = validateCoupon(checkoutState.couponCode, sub);
+  if(!v.ok) return 0;
+  const c = v.c;
+  return c.type==='percent' ? sub*c.value/100 : Math.min(c.value, sub);
+}
+route('/checkout', ()=>{
+  setTitle('Checkout');
+  const lines = cartLines();
+  if(!lines.length) return `<div class="container"><div class="empty">Your cart is empty.<div><button class="btn primary" onclick="nav('/shop')">Browse products</button></div></div></div>`;
+  const sub = cartSubtotal();
+  const shipCost = sub>FREE_SHIP ? 0 : (SHIP_OPTIONS.find(s=>s.id===checkoutState.shipping.method)||SHIP_OPTIONS[0]).cost;
+  const disc = couponDiscount(sub);
+  const total = Math.max(0, sub + shipCost - disc);
+  const steps = ['Information','Shipping','Payment','Review'];
+  const s = checkoutState.step;
+  return `<div class="container" style="padding-top:16px;max-width:640px;">
+    <h1 style="font-size:1.3rem;margin:0 0 6px;">Checkout</h1>
+    <div style="font-size:.8rem;color:var(--ink-dim);margin-bottom:16px;">Step ${s} of 4 — ${steps[s-1]}</div>
+    <div class="stepbar">${[1,2,3,4].map(i=>`<div class="seg ${i<=s?'done':''}"></div>`).join('')}</div>
+    ${s===1?checkoutStep1():s===2?checkoutStep2(shipCost,sub):s===3?checkoutStep3():checkoutStep4(sub,shipCost,disc,total,lines)}
+  </div>`;
+});
+function checkoutStep1(){
+  const c = checkoutState.customer;
+  return `
+    <div class="field"><label>Full name</label><input id="cf_name" value="${c.name||''}"></div>
+    <div class="row2">
+      <div class="field"><label>Phone number</label><input id="cf_phone" value="${c.phone||''}"></div>
+      <div class="field"><label>Email</label><input id="cf_email" value="${c.email||''}"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Country</label><input id="cf_country" value="${c.country||''}"></div>
+      <div class="field"><label>State / Province</label><input id="cf_state" value="${c.state||''}"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>City</label><input id="cf_city" value="${c.city||''}"></div>
+      <div class="field"><label>Address</label><input id="cf_addr" value="${c.address||''}"></div>
+    </div>
+    <div id="cf_err" style="color:var(--bad);font-size:.82rem;margin-bottom:10px;"></div>
+    <button class="btn primary block" onclick="ckNext1()">Continue to shipping</button>`;
+}
+function ckNext1(){
+  const g = id=>document.getElementById(id).value.trim();
+  const name=g('cf_name'), phone=g('cf_phone'), email=g('cf_email'), country=g('cf_country'), st=g('cf_state'), city=g('cf_city'), addr=g('cf_addr');
+  const err = document.getElementById('cf_err');
+  if(!name||!phone||!email||!country||!city||!addr){ err.textContent='Please fill in all required fields.'; return; }
+  if(!/^\S+@\S+\.\S+$/.test(email)){ err.textContent='Enter a valid email address.'; return; }
+  if(phone.replace(/\D/g,'').length<7){ err.textContent='Enter a valid phone number.'; return; }
+  checkoutState.customer = {name:clean(name),phone:clean(phone),email:clean(email),country:clean(country),state:clean(st),city:clean(city),address:clean(addr)};
+  checkoutState.step=2; render();
+}
+function checkoutStep2(shipCost,sub){
+  return `
+    ${SHIP_OPTIONS.map(o=>`
+      <label style="display:flex;align-items:center;gap:12px;padding:14px;border:1px solid var(--line);border-radius:12px;margin-bottom:10px;cursor:pointer;">
+        <input type="radio" name="ship" value="${o.id}" ${checkoutState.shipping.method===o.id?'checked':''} onchange="checkoutState.shipping.method='${o.id}';render(true);">
+        <div style="flex:1;"><div style="font-size:.92rem;">${o.name}</div><div style="font-size:.76rem;color:var(--ink-dim);">${o.eta}</div></div>
+        <div class="mono">${sub>FREE_SHIP&&o.id==='standard'?'Free':money(o.cost)}</div>
+      </label>`).join('')}
+    <div style="display:flex;gap:10px;margin-top:8px;">
+      <button class="btn ghost" style="flex:1;" onclick="checkoutState.step=1;render();">Back</button>
+      <button class="btn primary" style="flex:2;" onclick="checkoutState.step=3;render();">Continue to payment</button>
+    </div>`;
+}
+function checkoutStep3(){
+  const m = checkoutState.payment.method;
+  return `
+    <label style="display:flex;align-items:center;gap:12px;padding:14px;border:1px solid var(--line);border-radius:12px;margin-bottom:10px;cursor:pointer;">
+      <input type="radio" name="pay" ${m==='cod'?'checked':''} onchange="checkoutState.payment.method='cod';">
+      <div><div style="font-size:.92rem;">Cash on Delivery</div><div style="font-size:.76rem;color:var(--ink-dim);">Pay when your order arrives.</div></div>
+    </label>
+    <label style="display:flex;align-items:center;gap:12px;padding:14px;border:1px solid var(--line);border-radius:12px;margin-bottom:10px;cursor:pointer;opacity:.6;">
+      <input type="radio" name="pay" ${m==='online'?'checked':''} onchange="checkoutState.payment.method='online';">
+      <div><div style="font-size:.92rem;">Online Payment</div><div style="font-size:.76rem;color:var(--ink-dim);">Placeholder — connect a real payment provider here.</div></div>
+    </label>
+    <div style="display:flex;gap:10px;margin-top:8px;">
+      <button class="btn ghost" style="flex:1;" onclick="checkoutState.step=2;render();">Back</button>
+      <button class="btn primary" style="flex:2;" onclick="checkoutState.step=4;render();">Review order</button>
+    </div>`;
+}
+function checkoutStep4(sub,shipCost,disc,total,lines){
+  const c = checkoutState.customer;
+  return `
+    <h3 style="font-size:.95rem;margin:0 0 8px;">Items</h3>
+    ${lines.map(l=>`<div style="display:flex;justify-content:space-between;font-size:.85rem;padding:6px 0;border-bottom:1px dashed var(--line);"><span>${l.p.name} × ${l.qty}</span><span>${money(l.total)}</span></div>`).join('')}
+    <h3 style="font-size:.95rem;margin:18px 0 8px;">Shipping to</h3>
+    <div style="font-size:.85rem;color:var(--ink-dim);line-height:1.6;">${c.name}<br>${c.address}, ${c.city}, ${c.state?c.state+', ':''}${c.country}<br>${c.phone} · ${c.email}</div>
+    <h3 style="font-size:.95rem;margin:18px 0 8px;">Payment</h3>
+    <div style="font-size:.85rem;color:var(--ink-dim);">${checkoutState.payment.method==='cod'?'Cash on Delivery':'Online Payment'}</div>
+    <div style="display:flex;gap:8px;margin-top:16px;"><input id="ck_coupon" class="qin" style="flex:1;width:auto;" placeholder="Coupon code" value="${checkoutState.couponCode||''}"><button class="btn ghost sm" onclick="applyCouponFromCheckout()">Apply</button></div>
+    <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--line);font-size:.88rem;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="color:var(--ink-dim)">Subtotal</span><span>${money(sub)}</span></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="color:var(--ink-dim)">Shipping</span><span>${shipCost===0?'Free':money(shipCost)}</span></div>
+      ${disc>0?`<div style="display:flex;justify-content:space-between;margin-bottom:6px;color:var(--good)"><span>Coupon (${checkoutState.couponCode})</span><span>−${money(disc)}</span></div>`:''}
+      <div style="display:flex;justify-content:space-between;font-size:1.05rem;font-weight:600;margin-top:8px;"><span>Total</span><span>${money(total)}</span></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button class="btn ghost" style="flex:1;" onclick="checkoutState.step=3;render();">Back</button>
+      <button class="btn primary" style="flex:2;" id="confirmBtn" onclick="confirmOrder()">Confirm order</button>
+    </div>`;
+}
+function confirmOrder(){
+  const btn = document.getElementById('confirmBtn');
+  if(btn.disabled) return;
+  btn.disabled = true; btn.textContent = 'Placing order…';
+  const lines = cartLines();
+  for(const l of lines){
+    const fresh = state.products.find(x=>x.id===l.p.id);
+    if(!fresh || fresh.stock < l.qty){ toast('Sorry, "'+l.p.name+'" no longer has enough stock.', 'err'); btn.disabled=false; btn.textContent='Confirm order'; render(); return; }
+  }
+  const sub = cartSubtotal();
+  const shipOpt = SHIP_OPTIONS.find(s=>s.id===checkoutState.shipping.method)||SHIP_OPTIONS[0];
+  const shipCost = sub>FREE_SHIP ? 0 : shipOpt.cost;
+  const disc = couponDiscount(sub);
+  const total = Math.max(0, sub+shipCost-disc);
+  const order = {
+    id: 'BG'+Date.now().toString().slice(-8),
+    items: lines.map(l=>({productId:l.p.id, name:l.p.name, qty:l.qty, price:l.unit})),
+    customer: {...checkoutState.customer},
+    shipping: {...checkoutState.shipping, name:shipOpt.name, eta:shipOpt.eta},
+    payment: {method:checkoutState.payment.method, status: checkoutState.payment.method==='cod'?'pending':'pending'},
+    coupon: disc>0 ? checkoutState.couponCode : null,
+    subtotal:sub, shippingCost:shipCost, discount:disc, total,
+    status:'Pending', createdAt:Date.now(),
+  };
+  lines.forEach(l=>{ const p = state.products.find(x=>x.id===l.p.id); p.stock -= l.qty; });
+  if(disc>0){ const cc = state.coupons.find(x=>x.code===checkoutState.couponCode); if(cc) cc.used = (cc.used||0)+1; }
+  state.orders.unshift(order);
+  state.cart = [];
+  checkoutState = { step:1, customer:{}, shipping:{method:'standard',cost:1300,eta:'3–5 days'}, payment:{method:'cod'}, couponCode:null };
+  persist(); updateCartBadge();
+  nav('/order/'+order.id);
+}
+route('/order/:id', (params)=>{
+  const o = state.orders.find(x=>x.id===params.id);
+  setTitle('Order '+params.id);
+  if(!o) return notFoundView();
+  return `<div class="container" style="padding-top:30px;max-width:520px;text-align:center;">
+    <div style="width:64px;height:64px;border-radius:50%;background:rgba(107,220,154,.15);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#6bdc9a" stroke-width="2.2"><path d="M20 6L9 17l-5-5"/></svg>
+    </div>
+    <h1 style="font-size:1.4rem;margin:0 0 6px;">Order placed successfully</h1>
+    <div style="color:var(--ink-dim);margin-bottom:20px;">Order <span class="mono">#${o.id}</span> · ${money(o.total)}</div>
+    <div style="text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:20px;">
+      <div style="font-size:.85rem;color:var(--ink-dim);margin-bottom:6px;">Delivery to</div>
+      <div style="font-size:.88rem;margin-bottom:14px;">${o.customer.name} · ${o.customer.address}, ${o.customer.city}</div>
+      <div style="font-size:.85rem;color:var(--ink-dim);margin-bottom:6px;">Shipping method</div>
+      <div style="font-size:.88rem;margin-bottom:14px;">${o.shipping.name} · ${o.shipping.eta}</div>
+      <div style="font-size:.85rem;color:var(--ink-dim);margin-bottom:6px;">Status</div>
+      <span class="pill ${o.status.toLowerCase()}">${o.status}</span>
+    </div>
+    <a class="btn primary block" style="display:flex;justify-content:center;text-decoration:none;margin-bottom:10px;" target="_blank" rel="noopener" href="${waLink(o)}">Send order via WhatsApp</a>
+    <button class="btn block" onclick="nav('/shop')">Continue shopping</button>
+  </div>`;
+});
+route('/account', ()=>{
+  setTitle('Account');
+  const orders = state.orders;
+  const wl = visibleProducts().filter(p=>state.wishlist.includes(p.id));
+  return `<div class="container" style="padding-top:18px;">
+    <h1 style="font-size:1.4rem;margin:0 0 6px;">Your orders</h1>
+    <div style="font-size:.78rem;color:var(--ink-dim);margin-bottom:16px;">Demo account view — orders placed on this device.</div>
+    ${orders.length? orders.map(o=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:14px;border:1px solid var(--line);border-radius:14px;margin-bottom:10px;cursor:pointer;" onclick="nav('/order/${o.id}')">
+        <div><div class="mono" style="font-size:.85rem;">#${o.id}</div><div style="font-size:.75rem;color:var(--ink-dim);">${new Date(o.createdAt).toLocaleDateString()} · ${o.items.length} item(s)</div></div>
+        <div style="text-align:right;"><div style="font-weight:500;">${money(o.total)}</div><span class="pill ${o.status.toLowerCase()}">${o.status}</span></div>
+      </div>`).join('') : `<div class="empty">No orders yet.<div><button class="btn primary" onclick="nav('/shop')">Start shopping</button></div></div>`}
+    ${wl.length?`<h2 class="h" style="font-size:1.1rem;margin:24px 0 12px;">Wishlist</h2><div class="grid2">${wl.map(productCard).join('')}</div>`:''}
+    <div style="margin-top:26px;padding-top:16px;border-top:1px solid var(--line);">
+      ${IS_OWNER?'<a href="#/admin" style="font-size:.8rem;color:var(--ink-dim);text-decoration:none;">Store administrator? →</a>':''}
+    </div>
+  </div>`;
+});
+
+function notFoundView(){ return `<div class="container"><div class="empty">Page not found.<div><button class="btn primary" onclick="nav('/home')">Back home</button></div></div></div>`; }
+
+/* =========================================================================
+   ADMIN
+   ========================================================================= */
+route('/admin/login', ()=>{
+  setTitle('Admin login');
+  return `<div class="container" style="max-width:380px;padding-top:60px;">
+    <h1 style="font-size:1.3rem;margin:0 0 6px;">Admin sign in</h1>
+    <div style="font-size:.78rem;color:var(--ink-dim);margin-bottom:20px;">Demo authentication — any password signs in. Wire this to real auth in production.</div>
+    <div class="field"><label>Email</label><input id="al_user" value="admin@amirphone.example"></div>
+    <div class="field"><label>Password</label><input id="al_pass" type="password" placeholder="Any value works in this demo"></div>
+    <button class="btn primary block" onclick="adminLogin()">Sign in</button>
+  </div>`;
+});
+function adminLogin(){
+  const pass = document.getElementById('al_pass').value;
+  if(!pass){ toast('Enter a password.', 'err'); return; }
+  state.adminAuth = true; persist();
+  nav('/admin');
+}
+function adminLogout(){ state.adminAuth = false; persist(); nav('/home'); }
+
+function adminShell(active, bodyHtml){
+  const links = [['/admin','Overview'],['/admin/products','Products'],['/admin/categories','Categories'],['/admin/orders','Orders'],['/admin/coupons','Coupons'],['/admin/settings','Settings']];
+  return `<div id="adminShell">
+    <div class="scrim" id="adminScrim" style="display:none;"></div>
+    <aside id="adminSidebar">
+      <div class="wordmark" style="margin-bottom:20px;padding:0 10px;"><b>Amir</b><span>Admin</span></div>
+      ${links.map(([href,label])=>`<a href="#${href}" class="${active===href?'active':''}">${label}</a>`).join('')}
+      <a href="#/home" style="margin-top:10px;border-top:1px solid var(--line);padding-top:14px;">View storefront</a>
+      <a href="#" onclick="adminLogout();return false;" style="color:var(--bad);">Log out</a>
+    </aside>
+    <div id="adminMain">
+      <button class="iconbtn" id="adminMenuBtn" style="margin-bottom:10px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      ${publishPanel()}
+      ${bodyHtml}
+    </div>
+  </div>`;
+}
+route('/admin', ()=>{
+  setTitle('Admin overview');
+  const P = state.products, O = state.orders;
+  const stats = [
+    ['Total products', P.length],
+    ['In stock', P.filter(p=>p.stock>0).length],
+    ['Low stock', P.filter(p=>p.stock>0&&p.stock<=5).length],
+    ['Out of stock', P.filter(p=>p.stock<=0).length],
+    ['Total categories', state.categories.length],
+    ['Total orders', O.length],
+    ['Total sales', money(O.reduce((a,o)=>a+o.total,0))],
+    ['Recent orders (7d)', O.filter(o=>Date.now()-o.createdAt<7*864e5).length],
+  ];
+  const recentProducts = P.slice().sort((a,b)=>b.createdAt-a.createdAt).slice(0,5);
+  const recentOrders = O.slice(0,5);
+  return adminShell('/admin', `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:10px;flex-wrap:wrap;"><h1 style="font-size:1.3rem;margin:0;">Overview</h1><button class="btn primary sm" onclick="nav('/admin/products/new')">Add product</button></div>
+    <div class="statgrid" style="margin-bottom:26px;">${stats.map(([l,v])=>`<div class="statcard"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('')}</div>
+    <div style="display:grid;grid-template-columns:1fr;gap:20px;">
+      <div>
+        <h3 style="font-size:1rem;margin:0 0 10px;">Recent products</h3>
+        <table class="dt"><thead><tr><th>Name</th><th>Stock</th><th>Price</th></tr></thead><tbody>
+        ${recentProducts.map(p=>`<tr><td data-label="Name">${p.name}</td><td data-label="Stock">${p.stock}</td><td data-label="Price">${money(p.discountPrice||p.price)}</td></tr>`).join('')}
+        </tbody></table>
+      </div>
+      <div>
+        <h3 style="font-size:1rem;margin:0 0 10px;">Recent orders</h3>
+        <table class="dt"><thead><tr><th>Order</th><th>Total</th><th>Status</th></tr></thead><tbody>
+        ${recentOrders.length?recentOrders.map(o=>`<tr><td data-label="Order" class="mono">#${o.id}</td><td data-label="Total">${money(o.total)}</td><td data-label="Status"><span class="pill ${o.status.toLowerCase()}">${o.status}</span></td></tr>`).join(''):'<tr><td colspan="3" style="color:var(--ink-dim);">No orders yet.</td></tr>'}
+        </tbody></table>
+      </div>
+    </div>`);
+});
+
+route('/admin/products', ()=>{
+  setTitle('Admin · Products');
+  const P = state.products;
+  return adminShell('/admin/products', `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+      <h1 style="font-size:1.3rem;margin:0;">Products</h1>
+      <button class="btn primary sm" onclick="nav('/admin/products/new')">Add product</button>
+    </div>
+    <table class="dt"><thead><tr><th>Image</th><th>Name</th><th>Category</th><th>Price</th><th>Sale price</th><th>Stock</th><th>Visible</th><th>Actions</th></tr></thead><tbody>
+    ${P.map(p=>`<tr>
+      <td data-label="Image"><div class="tdimg"><div class="rowthumb" style="${thumbBg(p)}"></div><label class="btn sm ghost filebtn">Change image<input type="file" accept="image/*" onchange="changeProductImage('${p.id}',this)"></label></div></td>
+      <td data-label="Name">${p.name}</td>
+      <td data-label="Category">${p.category}</td>
+      <td data-label="Price"><input class="qin" type="number" min="0" step="any" value="${p.price}" onchange="quickPrice('${p.id}',this.value)"></td>
+      <td data-label="Sale price"><input class="qin" type="number" min="0" step="any" value="${p.discountPrice||''}" placeholder="—" onchange="quickSale('${p.id}',this.value)"></td>
+      <td data-label="Stock"><input class="qin" type="number" min="0" value="${p.stock}" onchange="quickStock('${p.id}',this.value)"></td>
+      <td data-label="Visible"><input type="checkbox" ${p.visible?'checked':''} onchange="toggleProductVisible('${p.id}')"></td>
+      <td data-label="Actions"><div class="actwrap">
+        <button class="btn sm ghost" onclick="nav('/admin/products/edit/${p.id}')">Edit</button>
+        <button class="btn sm ghost" onclick="duplicateProduct('${p.id}')">Duplicate</button>
+        <button class="btn sm danger" onclick="confirmDeleteProduct('${p.id}')">Delete</button>
+      </div></td>
+    </tr>`).join('')}
+    </tbody></table>`);
+});
+function toggleProductVisible(id){ const p=state.products.find(x=>x.id===id); p.visible=!p.visible; persist(); render(true); }
+function duplicateProduct(id){
+  const p = state.products.find(x=>x.id===id);
+  const stamp = Date.now();
+  const copy = JSON.parse(JSON.stringify(p));
+  Object.assign(copy, {id:'pr_'+stamp, name:p.name+' (copy)', slug:slugify(p.name,'product')+'-copy-'+String(stamp).slice(-4), sku:p.sku+'-C', createdAt:stamp});
+  const snap = JSON.stringify(state);
+  state.products.push(copy);
+  if(!persist()){ state = JSON.parse(snap); toast('Storage is full — use smaller images.','err'); return; }
+  toast('Product duplicated','ok'); render(true);
+}
+function confirmDeleteProduct(id){
+  const p = state.products.find(x=>x.id===id);
+  openModal(`<h3 style="margin:0 0 10px;font-size:1.1rem;">Delete "${p.name}"?</h3>
+    <p style="color:var(--ink-dim);font-size:.88rem;">This can't be undone. The product will be removed from the storefront immediately.</p>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button class="btn ghost" style="flex:1;" onclick="closeModal()">Cancel</button>
+      <button class="btn danger" style="flex:1;" onclick="deleteProduct('${id}')">Delete</button>
+    </div>`);
+}
+function deleteProduct(id){ state.products = state.products.filter(x=>x.id!==id); state.cart = state.cart.filter(c=>c.productId!==id); state.wishlist = state.wishlist.filter(w=>w!==id); persist(); closeModal(); toast('Product deleted','ok'); render(true); }
+
+function productForm(existing){
+  const p = existing || {id:null,name:'',nameAr:'',descAr:'',brand:'Baiga',category:state.categories[0].slug,kind:'phone',price:0,discountPrice:'',stock:0,sku:'',rating:4.5,description:'',specs:[],features:[],featured:false,isNew:false,visible:true,images:[]};
+  return `
+    <h1 style="font-size:1.3rem;margin:0 0 16px;">${existing?'Edit product':'Add product'}</h1>
+    <div class="field"><label>Product name</label><input id="pf_name" value="${p.name}"></div>
+    <div class="field"><label>Product name (Arabic)</label><input id="pf_namear" dir="rtl" value="${p.nameAr||''}"></div>
+    <div class="row2">
+      <div class="field"><label>Brand</label><input id="pf_brand" value="${p.brand}"></div>
+      <div class="field"><label>Category</label><select id="pf_cat">${state.categories.map(c=>`<option value="${c.slug}" ${p.category===c.slug?'selected':''}>${c.name}</option>`).join('')}</select></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Price</label><input id="pf_price" type="number" value="${p.price}"></div>
+      <div class="field"><label>Discount price (optional)</label><input id="pf_dp" type="number" value="${p.discountPrice||''}"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Stock quantity</label><input id="pf_stock" type="number" value="${p.stock}"></div>
+      <div class="field"><label>SKU</label><input id="pf_sku" value="${p.sku}"></div>
+    </div>
+    <div class="field"><label>3D preview shape (procedural — no GLB backend in this demo)</label>
+      <select id="pf_kind">${Object.keys(HUES).map(k=>`<option value="${k}" ${p.kind===k?'selected':''}>${k}</option>`).join('')}</select>
+    </div>
+    <div class="field"><label>Rating</label><input id="pf_rating" type="number" step="0.1" min="0" max="5" value="${p.rating}"></div>
+    <div class="field"><label>Description</label><textarea id="pf_desc" rows="3">${p.description}</textarea></div>
+    <div class="field"><label>Description (Arabic)</label><textarea id="pf_descar" dir="rtl" rows="3">${p.descAr||''}</textarea></div>
+    <div class="field"><label>Product images</label>
+      <label class="dropzone filebtn" id="pf_drop">Drop images here or tap to upload<input type="file" id="pf_img" accept="image/*" multiple></label>
+      <label class="btn ghost sm filebtn" style="margin-top:8px;">Take photo<input type="file" id="pf_cam" accept="image/*" capture="environment"></label>
+      <div style="font-size:.72rem;color:var(--ink-dim);margin-top:6px;">Tap an image to make it the main one.</div>
+      <div class="imgprev" id="pf_imgprev">${adminImgPrevHtml()}</div>
+    </div>
+    <div class="field"><label>Specifications</label><div id="pf_specs">${(p.specs||[]).map(s=>specRow(s[0],s[1])).join('') || specRow('','')}</div>
+      <button class="btn ghost sm" style="margin-top:6px;" onclick="addSpecRow()" type="button">+ Add spec</button>
+    </div>
+    <div class="check"><input type="checkbox" id="pf_featured" ${p.featured?'checked':''}><label for="pf_featured">Featured product</label></div>
+    <div class="check" style="margin-top:8px;"><input type="checkbox" id="pf_new" ${p.isNew?'checked':''}><label for="pf_new">New product</label></div>
+    <div class="check" style="margin-top:8px;margin-bottom:16px;"><input type="checkbox" id="pf_visible" ${p.visible!==false?'checked':''}><label for="pf_visible">Visible on storefront</label></div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn ghost" style="flex:1;" onclick="nav('/admin/products')">Cancel</button>
+      <button class="btn primary" style="flex:2;" onclick="saveProduct('${p.id||''}')">Save product</button>
+    </div>`;
+}
+function specRow(k,v){ return `<div class="spec-row" style="margin-bottom:8px;"><input placeholder="Label" class="spec-k" value="${k}"><input placeholder="Value" class="spec-v" value="${v}"></div>`; }
+function addSpecRow(){ document.getElementById('pf_specs').insertAdjacentHTML('beforeend', specRow('','')); }
+window.__adminImages = [];
+function removeAdminImage(i){ window.__adminImages.splice(i,1); refreshAdminImgPrev(); }
+function refreshAdminImgPrev(){
+  document.getElementById('pf_imgprev').innerHTML = adminImgPrevHtml();
+}
+route('/admin/products/new', ()=>{ setTitle('Add product'); window.__adminImages=[]; return adminShell('/admin/products', productForm(null)); });
+route('/admin/products/edit/:id', (params)=>{ const p = state.products.find(x=>x.id===params.id); window.__adminImages = ((p&&p.images)||[]).slice(); setTitle('Edit product'); return adminShell('/admin/products', productForm(p)); });
+function saveProduct(id){
+  const g = k=>document.getElementById(k).value;
+  const name = g('pf_name').trim();
+  if(!name){ toast('Product name is required.','err'); return; }
+  const price = parseFloat(g('pf_price'));
+  if(isNaN(price) || price<=0){ toast('Enter a valid price.','err'); return; }
+  const dpRaw = g('pf_dp').trim(); const dp = dpRaw==='' ? null : parseFloat(dpRaw);
+  if(dp!==null && (isNaN(dp) || dp<=0 || dp>=price)){ toast('Sale price must be lower than the price.','err'); return; }
+  const stock = parseInt(g('pf_stock'),10);
+  if(isNaN(stock) || stock<0){ toast('Enter a valid stock quantity.','err'); return; }
+  const sku = clean(g('pf_sku')) || ('BG-'+Math.floor(Math.random()*9000+1000));
+  if(state.products.some(p=>p.sku===sku && p.id!==id)){ toast('This SKU is already used by another product.','err'); return; }
+  const rating = Math.min(5, Math.max(0, parseFloat(g('pf_rating'))||4.5));
+  const specs = Array.from(document.querySelectorAll('#pf_specs .spec-row')).map(r=>[clean(r.querySelector('.spec-k').value), clean(r.querySelector('.spec-v').value)]).filter(x=>x[0]&&x[1]);
+  const data = {
+    name:clean(name), nameAr:clean(g('pf_namear')), descAr:clean(g('pf_descar')), brand:clean(g('pf_brand'))||'Baiga',
+    category:g('pf_cat'), kind:g('pf_kind'), price, discountPrice:dp, stock, sku, rating,
+    description:clean(g('pf_desc')), specs,
+    featured:document.getElementById('pf_featured').checked, isNew:document.getElementById('pf_new').checked,
+    visible:document.getElementById('pf_visible').checked, images: window.__adminImages.slice(),
+  };
+  const snap = JSON.stringify(state);
+  if(id){
+    Object.assign(state.products.find(x=>x.id===id), data);
+  } else {
+    const stamp = Date.now();
+    data.id = 'pr_'+stamp;
+    data.slug = slugify(name,'product')+'-'+String(stamp).slice(-4);
+    data.reviewCount = 0; data.features = []; data.model3d = true; data.createdAt = stamp;
+    state.products.push(data);
+  }
+  if(!persist()){ state = JSON.parse(snap); toast('Storage is full — use smaller images.','err'); return; }
+  toast(id ? 'Product saved' : 'Product added','ok'); nav('/admin/products');
+}
+
+route('/admin/categories', ()=>{
+  setTitle('Admin · Categories');
+  return adminShell('/admin/categories', `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+      <h1 style="font-size:1.3rem;margin:0;">Categories</h1>
+      <button class="btn primary sm" onclick="openCategoryModal(null)">Add category</button>
+    </div>
+    <table class="dt"><thead><tr><th>Name</th><th>Products</th><th>Visible</th><th>Actions</th></tr></thead><tbody>
+    ${state.categories.map(c=>`<tr>
+      <td data-label="Name">${c.name}</td>
+      <td data-label="Products">${catCount(c.slug)}</td>
+      <td data-label="Visible"><input type="checkbox" ${c.visible?'checked':''} onchange="toggleCatVisible('${c.slug}')"></td>
+      <td data-label="Actions"><div class="actwrap">
+        <button class="btn sm ghost" onclick="openCategoryModal('${c.slug}')">Edit</button>
+        <button class="btn sm danger" onclick="confirmDeleteCategory('${c.slug}')">Delete</button>
+      </div></td>
+    </tr>`).join('')}
+    </tbody></table>`);
+});
+function toggleCatVisible(slug){ const c=state.categories.find(x=>x.slug===slug); c.visible=!c.visible; persist(); render(true); }
+function openCategoryModal(slug){
+  const c = slug? state.categories.find(x=>x.slug===slug) : {slug:'',name:'',description:'',visible:true};
+  openModal(`
+    <h3 style="margin:0 0 14px;font-size:1.1rem;">${slug?'Edit category':'Add category'}</h3>
+    <div class="field"><label>Name</label><input id="cm_name" value="${c.name}"></div>
+    <div class="field"><label>Description</label><textarea id="cm_desc" rows="2">${c.description}</textarea></div>
+    <div class="check" style="margin-bottom:16px;"><input type="checkbox" id="cm_vis" ${c.visible?'checked':''}><label for="cm_vis">Visible</label></div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn ghost" style="flex:1;" onclick="closeModal()">Cancel</button>
+      <button class="btn primary" style="flex:1;" onclick="saveCategory('${slug||''}')">Save</button>
+    </div>`);
+}
+function saveCategory(slug){
+  const name = document.getElementById('cm_name').value.trim();
+  if(!name){ toast('Category name is required.','err'); return; }
+  const desc = document.getElementById('cm_desc').value;
+  const vis = document.getElementById('cm_vis').checked;
+  if(slug){ const c = state.categories.find(x=>x.slug===slug); c.name=clean(name); c.description=clean(desc); c.visible=vis; }
+  else { state.categories.push({slug:slugify(name,'cat')+'-'+String(Date.now()).slice(-3), name:clean(name), description:clean(desc), visible:vis, image:null}); }
+  persist(); closeModal(); toast('Category saved','ok'); render(true);
+}
+function confirmDeleteCategory(slug){
+  openModal(`<h3 style="margin:0 0 10px;font-size:1.1rem;">Delete this category?</h3>
+    <p style="color:var(--ink-dim);font-size:.88rem;">Products in this category will be kept but marked "uncategorized" rather than deleted.</p>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button class="btn ghost" style="flex:1;" onclick="closeModal()">Cancel</button>
+      <button class="btn danger" style="flex:1;" onclick="deleteCategory('${slug}')">Delete</button>
+    </div>`);
+}
+function deleteCategory(slug){
+  state.products.forEach(p=>{ if(p.category===slug) p.category='uncategorized'; });
+  state.categories = state.categories.filter(c=>c.slug!==slug);
+  persist(); closeModal(); toast('Category deleted','ok'); render(true);
+}
+
+route('/admin/orders', ()=>{
+  setTitle('Admin · Orders');
+  const STATUSES = ['Pending','Confirmed','Preparing','Shipped','Delivered','Cancelled'];
+  const PSTATUSES = ['pending','paid','failed','refunded'];
+  return adminShell('/admin/orders', `
+    <h1 style="font-size:1.3rem;margin:0 0 16px;">Orders</h1>
+    <table class="dt"><thead><tr><th>Order</th><th>Customer</th><th>Total</th><th>Status</th><th>Payment</th><th></th></tr></thead><tbody>
+    ${state.orders.length?state.orders.map(o=>`<tr>
+      <td data-label="Order" class="mono">#${o.id}</td>
+      <td data-label="Customer">${o.customer.name}</td>
+      <td data-label="Total">${money(o.total)}</td>
+      <td data-label="Status"><select onchange="setOrderStatus('${o.id}',this.value)">${STATUSES.map(s=>`<option value="${s}" ${o.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
+      <td data-label="Payment"><select onchange="setOrderPayment('${o.id}',this.value)">${PSTATUSES.map(s=>`<option value="${s}" ${o.payment.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
+      <td data-label=""><button class="btn sm ghost" onclick="viewOrderModal('${o.id}')">View</button></td>
+    </tr>`).join(''):'<tr><td colspan="6" style="color:var(--ink-dim);">No orders yet.</td></tr>'}
+    </tbody></table>`);
+});
+function setOrderStatus(id,val){
+  const o = state.orders.find(x=>x.id===id); const was = o.status; if(was===val) return;
+  const prod = i=>state.products.find(x=>x.id===i.productId);
+  if(val==='Cancelled'){ o.items.forEach(i=>{ const p=prod(i); if(p) p.stock += i.qty; }); }
+  else if(was==='Cancelled'){
+    if(o.items.some(i=>{ const p=prod(i); return p && p.stock < i.qty; })){ toast('Not enough stock to reactivate this order.','err'); render(true); return; }
+    o.items.forEach(i=>{ const p=prod(i); if(p) p.stock -= i.qty; });
+  }
+  o.status = val; persist(); toast('Order updated','ok');
+}
+function setOrderPayment(id,val){ const o=state.orders.find(x=>x.id===id); o.payment.status=val; persist(); toast('Payment status updated','ok'); }
+function viewOrderModal(id){
+  const o = state.orders.find(x=>x.id===id);
+  openModal(`<h3 style="margin:0 0 12px;font-size:1.1rem;">Order #${o.id}</h3>
+    <div style="font-size:.85rem;color:var(--ink-dim);margin-bottom:10px;">${new Date(o.createdAt).toLocaleString()}</div>
+    ${o.items.map(i=>`<div style="display:flex;justify-content:space-between;font-size:.85rem;padding:5px 0;"><span>${i.name} × ${i.qty}</span><span>${money(i.price*i.qty)}</span></div>`).join('')}
+    <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px;font-size:.85rem;">
+      <div>${o.customer.name} · ${o.customer.phone}</div>
+      <div style="color:var(--ink-dim);">${o.customer.address}, ${o.customer.city}, ${o.customer.country}</div>
+    </div>
+    <div style="text-align:right;font-weight:600;margin-top:10px;">${money(o.total)}</div>
+    <button class="btn ghost block" style="margin-top:14px;" onclick="closeModal()">Close</button>`);
+}
+
+route('/admin/coupons', ()=>{
+  setTitle('Admin · Coupons');
+  return adminShell('/admin/coupons', `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+      <h1 style="font-size:1.3rem;margin:0;">Coupons</h1>
+      <button class="btn primary sm" onclick="openCouponModal()">Add coupon</button>
+    </div>
+    <table class="dt"><thead><tr><th>Code</th><th>Discount</th><th>Min order</th><th>Active</th><th></th></tr></thead><tbody>
+    ${state.coupons.map(c=>`<tr>
+      <td data-label="Code" class="mono">${c.code}</td>
+      <td data-label="Discount">${c.type==='percent'?c.value+'%':money(c.value)}</td>
+      <td data-label="Min order">${money(c.minOrder)}</td>
+      <td data-label="Active"><input type="checkbox" ${c.active?'checked':''} onchange="toggleCoupon('${c.code}')"></td>
+      <td data-label=""><button class="btn sm danger" onclick="deleteCoupon('${c.code}')">Delete</button></td>
+    </tr>`).join('')}
+    </tbody></table>`);
+});
+function toggleCoupon(code){ const c=state.coupons.find(x=>x.code===code); c.active=!c.active; persist(); render(true); }
+function deleteCoupon(code){ state.coupons=state.coupons.filter(x=>x.code!==code); persist(); render(true); }
+function openCouponModal(){
+  openModal(`<h3 style="margin:0 0 14px;font-size:1.1rem;">Add coupon</h3>
+    <div class="field"><label>Code</label><input id="cp_code" style="text-transform:uppercase;"></div>
+    <div class="row2">
+      <div class="field"><label>Type</label><select id="cp_type"><option value="percent">Percent</option><option value="fixed">Fixed amount</option></select></div>
+      <div class="field"><label>Value</label><input id="cp_val" type="number"></div>
+    </div>
+    <div class="field"><label>Minimum order</label><input id="cp_min" type="number" value="0"></div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn ghost" style="flex:1;" onclick="closeModal()">Cancel</button>
+      <button class="btn primary" style="flex:1;" onclick="saveCoupon()">Save</button>
+    </div>`);
+}
+function saveCoupon(){
+  const code = document.getElementById('cp_code').value.trim().toUpperCase();
+  if(!code){ toast('Coupon code required.','err'); return; }
+  state.coupons.push({code, type:document.getElementById('cp_type').value, value:+document.getElementById('cp_val').value||0, minOrder:+document.getElementById('cp_min').value||0, expires:'2027-12-31', usageLimit:9999, used:0, active:true});
+  persist(); closeModal(); toast('Coupon added','ok'); render(true);
+}
+
+route('/admin/settings', ()=>{
+  setTitle('Admin · Settings');
+  const s = state.settings;
+  return adminShell('/admin/settings', `
+    <h1 style="font-size:1.3rem;margin:0 0 16px;">Store settings</h1>
+    <div class="field"><label>Store name</label><input id="st_name" value="${s.storeName}"></div>
+    <div class="field"><label>Description</label><textarea id="st_desc" rows="2">${s.description}</textarea></div>
+    <div class="row2">
+      <div class="field"><label>Currency</label><input id="st_cur" value="${s.currency}"></div>
+      <div class="field"><label>Contact email</label><input id="st_email" value="${s.contactEmail}"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Instagram</label><input id="st_ig" value="${s.instagram}"></div>
+      <div class="field"><label>Twitter / X</label><input id="st_tw" value="${s.twitter}"></div>
+    </div>
+    <div class="field"><label>WhatsApp number (orders are sent here)</label><input id="st_wa" value="${s.whatsapp||'213667883670'}" placeholder="213XXXXXXXXX"></div>
+    ${storageMeter()}
+    <button class="btn primary" onclick="saveSettings()">Save settings</button>`);
+});
+function saveSettings(){
+  state.settings = {
+    storeName: clean(document.getElementById('st_name').value) || 'Amir Phone',
+    description: clean(document.getElementById('st_desc').value),
+    currency: document.getElementById('st_cur').value || 'DZD',
+    contactEmail: document.getElementById('st_email').value,
+    instagram: document.getElementById('st_ig').value,
+    twitter: document.getElementById('st_tw').value,
+    whatsapp: (document.getElementById('st_wa').value||'').replace(/\D/g,'') || '213667883670',
+    dzd: true,
+  };
+  persist(); toast('Settings saved','ok'); render(true);
+}
+
+/* =========================================================================
+   AFTER-RENDER HOOKS (mount 3D viewers, wire per-page listeners)
+   ========================================================================= */
+function afterRender(path){
+  document.querySelectorAll('[data-viewer]:not([data-lazy])').forEach(el=>{
+    mountViewer(el, el.dataset.viewer, +el.dataset.hue, {pid: el.dataset.pid});
+  });
+  const openFilterBtn = document.getElementById('openFilter');
+  if(openFilterBtn){
+    openFilterBtn.addEventListener('click', ()=>{
+      const qp = new URLSearchParams(parseHash().params);
+      const html = filterSheetHtml(qp);
+      openSheet('Filter', html, `<button class="btn ghost" style="flex:1;" id="resetF">Reset</button><button class="btn primary" style="flex:2;" id="applyF">Apply filters</button>`, ()=>{});
+      bindFilterChips(document.getElementById('sheetBody'));
+      document.getElementById('resetF').addEventListener('click', ()=>{
+        const base = new URLSearchParams(); const cat = document.getElementById('ctxCat').value;
+        if(cat) base.set('category',cat);
+        closeAllOverlays(); location.hash = '#'+parseHash().path+(base.toString()?'?'+base.toString():'');
+      });
+      document.getElementById('applyF').addEventListener('click', ()=>{
+        const newQp = readSheetFilters(document.getElementById('sheetBody'), parseHash().params);
+        closeAllOverlays();
+        location.hash = '#'+parseHash().path+(newQp.toString()?'?'+newQp.toString():'');
+      });
+    });
+  }
+  const sortSel = document.getElementById('sortSel');
+  if(sortSel){ sortSel.addEventListener('change', ()=>{
+    const qp = new URLSearchParams(parseHash().params); qp.set('sort', sortSel.value);
+    location.hash = '#'+parseHash().path+'?'+qp.toString();
+  }); }
+  const fi = document.getElementById('pf_img');
+  if(fi){
+    const handle = async files=>{
+      for(const f of files){ if(!f.type.startsWith('image/')) continue;
+        if(window.__adminImages.length>=8){ toast('Maximum 8 images per product.','err'); break; }
+        try{ window.__adminImages.push(await resizeImage(f)); }catch(e){ imgErr(e); } }
+      refreshAdminImgPrev(); toast('Image added','ok');
+    };
+    fi.addEventListener('change', ()=>{ handle(Array.from(fi.files)); fi.value=''; });
+    const cam = document.getElementById('pf_cam');
+    if(cam) cam.addEventListener('change', ()=>{ handle(Array.from(cam.files)); cam.value=''; });
+    document.onpaste = e=>{ const fl = Array.from((e.clipboardData&&e.clipboardData.files)||[]).filter(f=>f.type.indexOf('image/')===0); if(fl.length){ e.preventDefault(); handle(fl); } };
+    const dz = document.getElementById('pf_drop');
+    dz.addEventListener('dragover', e=>{ e.preventDefault(); dz.classList.add('over'); });
+    dz.addEventListener('dragleave', ()=> dz.classList.remove('over'));
+    dz.addEventListener('drop', e=>{ e.preventDefault(); dz.classList.remove('over'); handle(Array.from(e.dataTransfer.files)); });
+  }
+  const pw = document.getElementById('photoWrap');
+  if(pw){
+    let sx=0;
+    pw.addEventListener('touchstart', e=>{ sx=e.touches[0].clientX; }, {passive:true});
+    pw.addEventListener('touchend', e=>{
+      const dx = e.changedTouches[0].clientX - sx; if(Math.abs(dx)<40) return;
+      const slug = parseHash().path.split('/')[2]; const p = findProduct(slug); if(!p || !p.images || p.images.length<2) return;
+      const n = p.images.length; setMainImg(p.id, ((window.__imgIdx||0) + (dx<0?1:-1) + n) % n);
+    });
+  }
+  const adminMenuBtn = document.getElementById('adminMenuBtn');
+  if(adminMenuBtn){ adminMenuBtn.addEventListener('click', ()=>{
+    document.getElementById('adminSidebar').classList.toggle('open');
+  }); }
+}
+
+/* =========================================================================
+   LANGUAGE (English / العربية) — text is translated live from a dictionary,
+   so any new screen is covered automatically. Product names/descriptions
+   can have an Arabic version (nameAr / descAr) set from the admin form.
+   ========================================================================= */
+const AR = {
+  "Unpublished changes":"تغييرات غير منشورة","Live site is up to date":"الموقع المنشور محدّث",
+  "Customers see the catalog from the last publish. Changes you make here stay private until you publish.":"يرى الزبائن آخر نسخة منشورة من المنتجات. تبقى تعديلاتك خاصة بك حتى تضغط نشر.",
+  "Publish changes":"نشر التغييرات","Publishing…":"جارٍ النشر…",
+  "Open the published page in claude.ai to publish changes.":"افتح الصفحة المنشورة داخل claude.ai لنشر التغييرات.",
+  "This area is for the store owner only.":"هذه المنطقة لصاحب المتجر فقط.","Checking access…":"جارٍ التحقق من الصلاحية…",
+  "Send order via WhatsApp":"إرسال الطلب عبر واتساب","WhatsApp number (orders are sent here)":"رقم واتساب (تُرسل الطلبات إليه)",
+  "Only the store owner can publish.":"النشر متاح لصاحب المتجر فقط.","Publishing failed. Try again.":"فشل النشر. حاول مرة أخرى.","Too large — use smaller product images.":"الحجم كبير جدًا — استخدم صور منتجات أصغر.",
+  "Home":"الرئيسية","Categories":"الفئات","Shop":"المتجر","Cart":"السلة","Account":"حسابي",
+  "Your cart":"سلة التسوق","Your cart is empty.":"سلتك فارغة.","Browse products":"تصفح المنتجات","Subtotal":"المجموع الفرعي",
+  "Checkout":"إتمام الشراء","View full cart":"عرض السلة كاملة","Remove":"إزالة","New this season":"جديد هذا الموسم",
+  "Shop now":"تسوق الآن","Explore products":"استكشف المنتجات","Featured":"مميزة","Add to cart":"أضف إلى السلة",
+  "Out of stock":"نفدت الكمية","In stock":"متوفر","New":"جديد","Sale":"تخفيض","Filter":"تصفية","Reset":"إعادة ضبط",
+  "Apply filters":"تطبيق التصفية","Category":"الفئة","Brand":"العلامة التجارية","Price range":"نطاق السعر",
+  "Minimum rating":"أقل تقييم","On sale":"عروض فقط","New arrivals":"وصل حديثاً","Newest":"الأحدث",
+  "Price: Low to High":"السعر: من الأقل للأعلى","Price: High to Low":"السعر: من الأعلى للأقل",
+  "Most Popular":"الأكثر شعبية","Highest Rated":"الأعلى تقييماً","Biggest Discount":"أكبر خصم",
+  "No products match these filters.":"لا توجد منتجات مطابقة.","Reset filters":"إعادة ضبط التصفية","Explore":"استكشف",
+  "Features":"المميزات","Specifications":"المواصفات","Reviews":"التقييمات","Related products":"منتجات ذات صلة",
+  "Buy now":"اشترِ الآن","Apply":"تطبيق","Continue shopping":"متابعة التسوق","Continue to shipping":"المتابعة إلى الشحن",
+  "Back":"رجوع","Continue to payment":"المتابعة إلى الدفع","Review order":"مراجعة الطلب","Confirm order":"تأكيد الطلب",
+  "Placing order…":"جارٍ إرسال الطلب…","Full name":"الاسم الكامل","Phone number":"رقم الهاتف","Email":"البريد الإلكتروني",
+  "Country":"الدولة","State / Province":"الولاية / المحافظة","City":"المدينة","Address":"العنوان","Standard":"عادي","Express":"سريع",
+  "Cash on Delivery":"الدفع عند الاستلام","Online Payment":"الدفع الإلكتروني","Pay when your order arrives.":"ادفع عند وصول طلبك.",
+  "Placeholder — connect a real payment provider here.":"تجريبي — اربط مزود دفع حقيقي هنا.",
+  "Items":"المنتجات","Shipping to":"الشحن إلى","Payment":"الدفع","Shipping":"الشحن","Total":"الإجمالي","Free":"مجاني",
+  "Order placed successfully":"تم إرسال الطلب بنجاح","Delivery to":"التوصيل إلى","Shipping method":"طريقة الشحن",
+  "Status":"الحالة","Pending":"قيد الانتظار","pending":"قيد الانتظار","Your orders":"طلباتي","No orders yet.":"لا توجد طلبات بعد.",
+  "Start shopping":"ابدأ التسوق","Store administrator? →":"مدير المتجر؟ ←","Page not found.":"الصفحة غير موجودة.",
+  "Back home":"العودة للرئيسية","Information":"المعلومات","Review":"المراجعة","Popular categories":"الفئات الشائعة",
+  "Recent searches":"عمليات البحث الأخيرة","Search products, brands, SKU…":"ابحث عن منتج أو علامة أو رمز…","Coupon code":"رمز القسيمة",
+  "Shipping and any coupon discount are calculated at checkout.":"يُحتسب الشحن وخصم القسيمة عند إتمام الشراء.",
+  "Demo account view — orders placed on this device.":"عرض تجريبي — الطلبات المُرسلة من هذا الجهاز.",
+  "3–5 business days":"3–5 أيام عمل","1–2 business days":"1–2 يوم عمل","Photos":"الصور","3D view":"عرض ثلاثي الأبعاد",
+  "Admin sign in":"تسجيل دخول المشرف","Password":"كلمة المرور","Sign in":"دخول","Overview":"نظرة عامة","Products":"المنتجات",
+  "Orders":"الطلبات","Coupons":"القسائم","Settings":"الإعدادات","View storefront":"عرض المتجر","Log out":"تسجيل الخروج",
+  "Add product":"إضافة منتج","Edit product":"تعديل المنتج","Name":"الاسم","Price":"السعر","Sale price":"سعر الخصم","Stock":"المخزون",
+  "Visible":"ظاهر","Actions":"إجراءات","Edit":"تعديل","Duplicate":"نسخ","Delete":"حذف","Cancel":"إلغاء","Save product":"حفظ المنتج",
+  "Product name":"اسم المنتج","Product name (Arabic)":"اسم المنتج (بالعربية)","Description (Arabic)":"الوصف (بالعربية)",
+  "Discount price (optional)":"سعر الخصم (اختياري)","Stock quantity":"كمية المخزون","Rating":"التقييم","Description":"الوصف",
+  "Product images":"صور المنتج","Image":"الصورة","Change image":"تغيير الصورة","Main image":"الصورة الرئيسية",
+  "Drop images here or tap to upload":"اسحب الصور هنا أو اضغط للرفع","Tap an image to make it the main one.":"اضغط على صورة لجعلها الرئيسية.",
+  "+ Add spec":"+ إضافة مواصفة","Featured product":"منتج مميز","New product":"منتج جديد","Visible on storefront":"ظاهر في المتجر",
+  "Total products":"إجمالي المنتجات","Low stock":"مخزون منخفض","Total categories":"إجمالي الفئات","Total orders":"إجمالي الطلبات",
+  "Total sales":"إجمالي المبيعات","Recent orders (7d)":"طلبات آخر 7 أيام","Recent products":"أحدث المنتجات","Recent orders":"أحدث الطلبات",
+  "Order":"الطلب","Customer":"العميل","View":"عرض","Close":"إغلاق","Add category":"إضافة فئة","Edit category":"تعديل الفئة","Save":"حفظ",
+  "Confirmed":"مؤكد","Preparing":"قيد التحضير","Shipped":"تم الشحن","Delivered":"تم التسليم","Cancelled":"ملغى","paid":"مدفوع",
+  "failed":"فشل","refunded":"مسترد","Add coupon":"إضافة قسيمة","Code":"الرمز","Discount":"الخصم","Min order":"الحد الأدنى","Active":"مفعّل",
+  "Type":"النوع","Value":"القيمة","Minimum order":"الحد الأدنى للطلب","Percent":"نسبة مئوية","Fixed amount":"مبلغ ثابت",
+  "Store settings":"إعدادات المتجر","Store name":"اسم المتجر","Currency":"العملة","Contact email":"بريد التواصل","Save settings":"حفظ الإعدادات",
+  "Label":"العنوان","Specs":"المواصفات","Delete this category?":"حذف هذه الفئة؟","Yes, delete":"نعم، احذف",
+  "This can't be undone. The product will be removed from the storefront immediately.":"لا يمكن التراجع. سيُحذف المنتج من المتجر فوراً.",
+  "Products in this category will be kept but marked \"uncategorized\" rather than deleted.":"ستبقى منتجات هذه الفئة ولن تُحذف.",
+  "Demo authentication — any password signs in. Wire this to real auth in production.":"دخول تجريبي — أي كلمة مرور تعمل. اربطه بمصادقة حقيقية عند الإنتاج.",
+  "3D preview shape (procedural — no GLB backend in this demo)":"شكل المعاينة ثلاثية الأبعاد (تجريبي)",
+  "Smartphones":"الهواتف الذكية","Laptops":"الحواسيب المحمولة","Gaming":"الألعاب","Headphones":"سماعات الرأس","Earbuds":"سماعات الأذن",
+  "Smart Watches":"الساعات الذكية","Keyboards":"لوحات المفاتيح","Gaming Mice":"فئران الألعاب","Gaming Controllers":"أذرع الألعاب",
+  "Chargers":"الشواحن","Cables":"الكابلات","Power Banks":"بنوك الطاقة","SSD & Storage":"التخزين وSSD","PC Accessories":"إكسسوارات الحاسوب",
+  "Other Electronics":"إلكترونيات أخرى","Display":"الشاشة","Chip":"المعالج","Storage":"التخزين","Battery":"البطارية","Weight":"الوزن",
+  "Product added":"تمت إضافة المنتج","Image added":"تمت إضافة الصورة","Drag to rotate · double-tap to zoom":"اسحب للتدوير · انقر مرتين للتقريب","Private mode: changes will not be kept after closing the page.":"وضع التصفح الخاص: لن تُحفظ التغييرات بعد إغلاق الصفحة.","Wishlist":"المفضلة","Premium electronics":"إلكترونيات فاخرة","Take photo":"التقاط صورة",
+  "Storage used":"المساحة المستخدمة","Not enough stock to reactivate this order.":"لا يوجد مخزون كافٍ لإعادة تفعيل هذا الطلب.",
+  "Something went wrong loading this page.":"حدث خطأ أثناء تحميل الصفحة.","Reload":"إعادة التحميل",
+  "3D is not supported on this device.":"العرض ثلاثي الأبعاد غير مدعوم على هذا الجهاز.",
+  "Unsupported image format. Use JPG, PNG or WEBP.":"صيغة الصورة غير مدعومة. استخدم JPG أو PNG أو WEBP.",
+  "Image is too large (max 15 MB).":"الصورة كبيرة جداً (الحد الأقصى 15 ميغابايت).","Maximum 8 images per product.":"الحد الأقصى 8 صور لكل منتج.",
+  "Coupon applied":"تم تطبيق القسيمة","This coupon has reached its usage limit.":"وصلت هذه القسيمة إلى حد الاستخدام.",
+  "Sale price must be lower than the price.":"يجب أن يكون سعر الخصم أقل من السعر.","Enter a valid stock quantity.":"أدخل كمية مخزون صحيحة.",
+  "This SKU is already used by another product.":"رمز SKU مستخدم لمنتج آخر.","Product saved":"تم حفظ المنتج","Product deleted":"تم حذف المنتج","Product duplicated":"تم نسخ المنتج",
+  "Price updated":"تم تحديث السعر","Sale price updated":"تم تحديث سعر الخصم","Stock updated":"تم تحديث المخزون","Image updated":"تم تحديث الصورة",
+  "Order updated":"تم تحديث الطلب","Payment status updated":"تم تحديث حالة الدفع","Category saved":"تم حفظ الفئة","Category deleted":"تم حذف الفئة",
+  "Coupon added":"تمت إضافة القسيمة","Settings saved":"تم حفظ الإعدادات","Invalid or expired coupon.":"قسيمة غير صالحة أو منتهية.",
+  "Please fill in all required fields.":"يرجى ملء جميع الحقول المطلوبة.","Enter a valid email address.":"أدخل بريداً إلكترونياً صحيحاً.",
+  "Enter a valid phone number.":"أدخل رقم هاتف صحيح.","Product name is required.":"اسم المنتج مطلوب.","Category name is required.":"اسم الفئة مطلوب.",
+  "Coupon code required.":"رمز القسيمة مطلوب.","Enter a password.":"أدخل كلمة المرور.","Enter a valid price.":"أدخل سعراً صحيحاً.",
+  "Could not read image":"تعذّرت قراءة الصورة","Storage is full — use smaller images.":"مساحة التخزين ممتلئة — استخدم صوراً أصغر."
+};
+const AR_PATS = [
+  [/^Step (\d) of 4 — (.+)$/, (m,a,b)=>"الخطوة "+a+" من 4 — "+trText(b)],
+  [/^(\d+) products$/, (m,n)=>n+" منتج"],
+  [/^(.+) added to cart$/, (m,n)=>n+" أُضيف إلى السلة"],
+  [/^Only (\d+) items available\.$/, (m,n)=>"المتوفر "+n+" فقط."],
+  [/^Only (\d+) available\.$/, (m,n)=>"المتوفر "+n+" فقط."],
+  [/^Only (\d+) left$/, (m,n)=>"بقي "+n+" فقط"],
+  [/^Results for “(.+)”$/, (m,q)=>"نتائج “"+q+"”"],
+  [/^No matches for “(.+)”\.$/, (m,q)=>"لا نتائج لـ “"+q+"”."],
+  [/^\((\d+) reviews\)$/, (m,n)=>"("+n+" تقييم)"],
+  [/^Delete "(.+)"\?$/, (m,n)=>"حذف \""+n+"\"؟"],
+  [/^Coupon "(.+)" will be applied at checkout\.$/, (m,c)=>"سيتم تطبيق القسيمة \""+c+"\" عند إتمام الشراء."],
+  [/^Sorry, "(.+)" no longer has enough stock\.$/, (m,n)=>"عذراً، لم يعد \""+n+"\" متوفراً بالكمية المطلوبة."],
+  [/^Requires a minimum order of (.+)\.$/, (m,n)=>"يتطلب حداً أدنى للطلب "+n+"."],
+];
+function trText(s){
+  const t = s.trim(); if(!t) return s;
+  let out = AR[t];
+  if(!out){ for(const [re,fn] of AR_PATS){ const m = t.match(re); if(m){ out = fn.apply(null,m); break; } } }
+  if(!out) return s;
+  return s.replace(t, out);
+}
+const origText = new WeakMap();
+function translateNode(node){
+  if(state.lang!=='ar') return;
+  if(node.nodeType===3){
+    const r = trText(node.nodeValue);
+    if(r!==node.nodeValue){ origText.set(node, node.nodeValue); node.nodeValue = r; }
+  } else if(node.nodeType===1){
+    if(node.tagName==='SCRIPT'||node.tagName==='STYLE') return;
+    const w = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, {acceptNode:t=>{ const pt=t.parentNode&&t.parentNode.tagName; return (pt==='SCRIPT'||pt==='STYLE')?NodeFilter.FILTER_REJECT:NodeFilter.FILTER_ACCEPT; }});
+    let n; while((n = w.nextNode())){ const r = trText(n.nodeValue); if(r!==n.nodeValue){ origText.set(n, n.nodeValue); n.nodeValue = r; } }
+    const els = node.querySelectorAll ? node.querySelectorAll('[placeholder]') : [];
+    els.forEach(el=>{ const ph = el.getAttribute('placeholder'); const r = trText(ph); if(r!==ph){ el.dataset.phOrig = ph; el.setAttribute('placeholder', r); } });
+    if(node.hasAttribute && node.hasAttribute('placeholder')){ const ph=node.getAttribute('placeholder'); const r=trText(ph); if(r!==ph){ node.dataset.phOrig=ph; node.setAttribute('placeholder',r); } }
+  }
+}
+function restoreEnglish(){
+  const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  let n; while((n = w.nextNode())){ if(origText.has(n)){ n.nodeValue = origText.get(n); } }
+  document.querySelectorAll('[data-ph-orig]').forEach(el=>{ el.setAttribute('placeholder', el.dataset.phOrig); });
+}
+new MutationObserver(muts=>{
+  if(state.lang!=='ar') return;
+  muts.forEach(m=> m.addedNodes.forEach(translateNode));
+}).observe(document.body, {childList:true, subtree:true});
+
+function applyLang(){
+  const ar = state.lang==='ar';
+  document.documentElement.lang = ar ? 'ar' : 'en';
+  document.documentElement.dir = ar ? 'rtl' : 'ltr';
+  document.getElementById('langBtn').textContent = ar ? 'EN' : 'ع';
+  if(ar) translateNode(document.body); else restoreEnglish();
+}
+function setLang(l){ state.lang = l; persist(); applyLang(); render(true); if(document.getElementById('cartDrawer').classList.contains('open')) renderCartDrawer(); }
+document.getElementById('langBtn').addEventListener('click', ()=> setLang(state.lang==='ar' ? 'en' : 'ar'));
+
+function pname(p){ return (state.lang==='ar' && p.nameAr) ? p.nameAr : p.name; }
+function pdesc(p){ return (state.lang==='ar' && p.descAr) ? p.descAr : p.description; }
+function thumbBg(p){ return "background:url("+pimg(p)+") center/cover no-repeat,#0d0f14;"; }
+
+/* =========================================================================
+   IMAGES — resize on upload so they fit in browser storage
+   ========================================================================= */
+function resizeImage(file){
+  return new Promise((res,rej)=>{
+    if(!/^image\//.test(file.type)) return rej(new Error('type'));
+    if(file.size > 15*1024*1024) return rej(new Error('size'));
+    const fr = new FileReader();
+    fr.onerror = ()=>rej(new Error('read'));
+    fr.onload = ()=>{
+      const img = new Image();
+      img.onerror = ()=>rej(new Error('format'));
+      img.onload = ()=>{
+        const enc = (c,q)=>{
+          let o = c.toDataURL('image/webp', q);
+          if(o.indexOf('data:image/webp')!==0){
+            const c2 = document.createElement('canvas'); c2.width=c.width; c2.height=c.height;
+            const x = c2.getContext('2d'); x.fillStyle='#fff'; x.fillRect(0,0,c.width,c.height); x.drawImage(c,0,0);
+            o = c2.toDataURL('image/jpeg', q);
+          }
+          return o;
+        };
+        let out = '';
+        for(const [max,q] of [[900,.82],[720,.72],[560,.62]]){
+          const sc = Math.min(1, max/Math.max(img.width,img.height));
+          const c = document.createElement('canvas');
+          c.width = Math.max(1,Math.round(img.width*sc)); c.height = Math.max(1,Math.round(img.height*sc));
+          c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+          out = enc(c,q);
+          if(out.length < 220000) break;
+        }
+        res(out);
+      };
+      img.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+function adminImgPrevHtml(){
+  return window.__adminImages.map((src,i)=>'<div class="th" '+(i===0?'style="outline:2px solid var(--lume)"':'')+'><img src="'+src+'" onclick="setMainAdminImage('+i+')" alt=""><button type="button" onclick="removeAdminImage('+i+')">&times;</button></div>').join('');
+}
+function setMainAdminImage(i){ const a = window.__adminImages; a.unshift(a.splice(i,1)[0]); refreshAdminImgPrev(); }
+
+/* -- quick edits from the products table -- */
+function quickPrice(id, v){
+  const p = state.products.find(x=>x.id===id); const n = parseFloat(v);
+  if(isNaN(n) || n<0){ toast('Enter a valid price.','err'); return; }
+  p.price = n; persist(); toast('Price updated','ok');
+}
+function quickSale(id, v){
+  const p = state.products.find(x=>x.id===id);
+  if(v===''){ p.discountPrice = null; } else { const n = parseFloat(v); if(isNaN(n)||n<0){ toast('Enter a valid price.','err'); return; } p.discountPrice = n; }
+  persist(); toast('Sale price updated','ok');
+}
+function quickStock(id, v){
+  const p = state.products.find(x=>x.id===id); const n = parseInt(v,10);
+  if(isNaN(n)||n<0){ toast('Enter a valid price.','err'); return; }
+  p.stock = n; persist(); toast('Stock updated','ok');
+}
+async function changeProductImage(id, input){
+  const f = input.files[0]; input.value=''; if(!f) return;
+  try{
+    const data = await resizeImage(f);
+    const snap = JSON.stringify(state);
+    const p = state.products.find(x=>x.id===id);
+    p.images = [data].concat((p.images||[]).slice(1));
+    if(!persist()){ state = JSON.parse(snap); toast('Storage is full — use smaller images.','err'); return; }
+    toast('Image updated','ok'); render(true);
+  }catch(e){ imgErr(e); }
+}
+
+/* -- product page gallery -- */
+function galleryHtml(p){
+  const real = !!(p.images && p.images.length);
+  const imgs = real ? p.images : [pimg(p)];
+  const start3d = !real;
+  window.__imgIdx = 0;
+  const hue = HUES[p.kind]||0x5aa7ff;
+  return '<div style="margin:14px 0;">'
+    + '<div id="photoWrap" class="photo'+(start3d?' hide':'')+'"><img id="mainImg" src="'+imgs[0]+'" alt="'+p.name+'" decoding="async"></div>'
+    + '<div id="viewerWrap"'+(start3d?'':' class="hide" data-lazy="1"')+' data-viewer="'+p.kind+'" data-hue="'+hue+'" data-pid="'+p.id+'"></div>'
+    + (imgs.length>1 ? '<div class="imgprev thumbs" style="justify-content:center;">'+imgs.map((src,i)=>'<div class="th" onclick="setMainImg(\''+p.id+'\','+i+')"><img src="'+src+'" alt=""></div>').join('')+'</div>' : '')
+    + '<div class="seg2"><button id="tabPhoto" class="'+(start3d?'':'active')+'" onclick="showTab(\'photo\',\''+p.id+'\')">Photos</button><button id="tabViewer" class="'+(start3d?'active':'')+'" onclick="showTab(\'viewer\',\''+p.id+'\')">3D view</button></div>'
+    + '<div class="vhint" id="vhint" style="'+(start3d?'':'display:none')+'">Drag to rotate · double-tap to zoom</div>'
+    + '</div>';
+}
+function setMainImg(id, i){
+  const p = state.products.find(x=>x.id===id); if(!p||!p.images[i]) return;
+  window.__imgIdx = i; document.getElementById('mainImg').src = p.images[i];
+}
+function showTab(mode, id){
+  const p = state.products.find(x=>x.id===id); if(!p) return;
+  const vw = document.getElementById('viewerWrap'), pw = document.getElementById('photoWrap');
+  document.getElementById('tabPhoto').classList.toggle('active', mode==='photo');
+  document.getElementById('tabViewer').classList.toggle('active', mode==='viewer');
+  document.getElementById('vhint').style.display = mode==='viewer' ? '' : 'none';
+  if(mode==='viewer'){
+    pw.classList.add('hide'); vw.classList.remove('hide');
+    mountViewer(vw, p.kind, HUES[p.kind]||0x5aa7ff, {pid:id});
+  } else {
+    unmountViewer(); vw.classList.add('hide'); vw.innerHTML=''; pw.classList.remove('hide');
+  }
+}
+
+/* =========================================================================
+   PRODUCT ART — every product gets a studio-style illustration by default.
+   Real photos uploaded from the admin panel replace it automatically.
+   ========================================================================= */
+const ART_HUES = [0x5aa7ff, 0xffb15a, 0x9adfd6, 0xa58bff, 0xff7a90];
+const artCache = {};
+function hex6(n){ return '#'+n.toString(16).padStart(6,'0'); }
+function hueFor(p){
+  let h = 0; const s = (p.id||'')+(p.name||'');
+  for(let i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i)) >>> 0;
+  return ART_HUES[h % ART_HUES.length];
+}
+function artSvg(kind, hue){
+  const c = hex6(hue);
+  const head = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800">'
+    + '<defs>'
+    + '<radialGradient id="bg" cx="50%" cy="38%" r="72%"><stop offset="0" stop-color="'+c+'" stop-opacity=".5"/><stop offset=".55" stop-color="#10131b"/><stop offset="1" stop-color="#07080b"/></radialGradient>'
+    + '<linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#454b59"/><stop offset=".45" stop-color="#1a1d25"/><stop offset="1" stop-color="#0b0d12"/></linearGradient>'
+    + '<linearGradient id="s" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="'+c+'"/><stop offset="1" stop-color="#0b1020"/></linearGradient>'
+    + '<linearGradient id="hl" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity=".0"/><stop offset=".5" stop-color="#fff" stop-opacity=".22"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>'
+    + '<filter id="bl"><feGaussianBlur stdDeviation="16"/></filter>'
+    + '</defs>'
+    + '<rect width="800" height="800" fill="url(#bg)"/>'
+    + '<ellipse cx="400" cy="682" rx="230" ry="26" fill="#000" opacity=".6" filter="url(#bl)"/>'
+    + '<ellipse cx="400" cy="640" rx="260" ry="90" fill="'+c+'" opacity=".10" filter="url(#bl)"/>';
+  let b = '';
+  const st = 'stroke="#5b6272" stroke-opacity=".55" stroke-width="2"';
+  if(kind==='phone'){
+    b = '<rect x="286" y="120" width="228" height="490" rx="44" fill="url(#m)" '+st+'/>'
+      + '<rect x="298" y="132" width="204" height="466" rx="34" fill="url(#s)"/>'
+      + '<rect x="360" y="146" width="80" height="20" rx="10" fill="#05060a"/>'
+      + '<circle cx="400" cy="330" r="70" fill="#fff" opacity=".18"/>'
+      + '<rect x="326" y="450" width="148" height="18" rx="9" fill="#fff" opacity=".28"/><rect x="326" y="482" width="100" height="14" rx="7" fill="#fff" opacity=".16"/>'
+      + '<polygon points="298,132 430,132 298,420" fill="url(#hl)" opacity=".8"/>';
+  } else if(kind==='headphones'){
+    b = '<path d="M212 470 C212 230 588 230 588 470" stroke="url(#m)" stroke-width="34" fill="none" stroke-linecap="round"/>'
+      + '<path d="M212 470 C212 236 588 236 588 470" stroke="'+c+'" stroke-opacity=".5" stroke-width="3" fill="none"/>'
+      + '<ellipse cx="200" cy="500" rx="66" ry="100" fill="url(#m)" '+st+'/><ellipse cx="200" cy="500" rx="40" ry="70" fill="none" stroke="'+c+'" stroke-width="5"/>'
+      + '<ellipse cx="600" cy="500" rx="66" ry="100" fill="url(#m)" '+st+'/><ellipse cx="600" cy="500" rx="40" ry="70" fill="none" stroke="'+c+'" stroke-width="5"/>';
+  } else if(kind==='watch'){
+    b = '<rect x="330" y="80" width="140" height="210" rx="24" fill="url(#m)" '+st+'/><rect x="330" y="510" width="140" height="210" rx="24" fill="url(#m)" '+st+'/>'
+      + '<rect x="286" y="250" width="228" height="300" rx="70" fill="url(#m)" '+st+'/>'
+      + '<rect x="514" y="360" width="16" height="70" rx="8" fill="#2a2e38"/>'
+      + '<rect x="300" y="264" width="200" height="272" rx="58" fill="url(#s)"/>'
+      + '<circle cx="400" cy="400" r="66" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="4"/>'
+      + '<line x1="400" y1="400" x2="400" y2="356" stroke="#fff" stroke-width="7" stroke-linecap="round"/><line x1="400" y1="400" x2="434" y2="418" stroke="#fff" stroke-width="5" stroke-linecap="round"/>';
+  } else if(kind==='controller'){
+    b = '<path d="M210 430 C210 320 300 296 400 296 C500 296 590 320 590 430 C590 530 548 588 506 548 C474 518 452 500 400 500 C348 500 326 518 294 548 C252 588 210 530 210 430Z" fill="url(#m)" '+st+'/>'
+      + '<circle cx="320" cy="400" r="34" fill="#0a0c11" stroke="'+c+'" stroke-width="4"/><circle cx="470" cy="466" r="34" fill="#0a0c11" stroke="'+c+'" stroke-width="4"/>'
+      + '<rect x="270" y="440" width="18" height="52" rx="4" fill="#2b2f3a"/><rect x="253" y="457" width="52" height="18" rx="4" fill="#2b2f3a"/>'
+      + '<circle cx="528" cy="386" r="13" fill="'+c+'"/><circle cx="556" cy="412" r="13" fill="#fff" opacity=".7"/><circle cx="500" cy="412" r="13" fill="#fff" opacity=".4"/><circle cx="528" cy="438" r="13" fill="#fff" opacity=".55"/>';
+  } else if(kind==='keyboard'){
+    b = '<rect x="120" y="290" width="560" height="250" rx="26" fill="url(#m)" '+st+'/>';
+    for(let r=0;r<4;r++) for(let k=0;k<12;k++){ b += '<rect x="'+(146+k*43)+'" y="'+(316+r*52)+'" width="36" height="42" rx="8" fill="#242833" stroke="#3a4050" stroke-width="1.5"/>'; }
+    b += '<rect x="146" y="296" width="508" height="6" rx="3" fill="'+c+'"/>';
+  } else if(kind==='mouse'){
+    b = '<path d="M400 170 C510 170 550 270 550 390 C550 510 510 630 400 630 C290 630 250 510 250 390 C250 270 290 170 400 170Z" fill="url(#m)" '+st+'/>'
+      + '<path d="M400 170 L400 340" stroke="#0a0c11" stroke-width="4"/><path d="M262 340 C300 350 500 350 538 340" stroke="#0a0c11" stroke-width="4" fill="none"/>'
+      + '<rect x="388" y="230" width="24" height="60" rx="12" fill="'+c+'"/><ellipse cx="400" cy="600" rx="60" ry="8" fill="'+c+'" opacity=".6"/>';
+  } else if(kind==='ssd'){
+    b = '<rect x="220" y="290" width="360" height="220" rx="30" fill="url(#m)" '+st+'/>'
+      + '<rect x="248" y="330" width="130" height="14" rx="7" fill="#fff" opacity=".35"/><rect x="248" y="358" width="90" height="10" rx="5" fill="#fff" opacity=".18"/>'
+      + '<rect x="248" y="452" width="304" height="16" rx="8" fill="'+c+'"/><rect x="560" y="378" width="10" height="60" rx="5" fill="#0a0c11"/>';
+  } else if(kind==='earbuds'){
+    b = '<g transform="rotate(-18 300 400)"><rect x="262" y="290" width="70" height="220" rx="35" fill="url(#m)" '+st+'/><circle cx="297" cy="530" r="36" fill="url(#s)"/></g>'
+      + '<g transform="rotate(18 500 400)"><rect x="466" y="290" width="70" height="220" rx="35" fill="url(#m)" '+st+'/><circle cx="501" cy="530" r="36" fill="url(#s)"/></g>'
+      + '<rect x="286" y="560" width="228" height="100" rx="40" fill="url(#m)" '+st+'/><rect x="384" y="596" width="32" height="8" rx="4" fill="'+c+'"/>';
+  } else if(kind==='laptop'){
+    b = '<rect x="190" y="180" width="420" height="290" rx="18" fill="url(#m)" '+st+'/><rect x="206" y="196" width="388" height="258" rx="8" fill="url(#s)"/>'
+      + '<circle cx="400" cy="325" r="60" fill="#fff" opacity=".16"/><polygon points="206,196 380,196 206,400" fill="url(#hl)"/>'
+      + '<path d="M140 486 L660 486 L706 546 L94 546Z" fill="url(#m)" '+st+'/><rect x="340" y="500" width="120" height="14" rx="7" fill="#0a0c11"/>';
+  } else if(kind==='charger'){
+    b = '<rect x="350" y="200" width="24" height="80" rx="6" fill="#8b91a0"/><rect x="426" y="200" width="24" height="80" rx="6" fill="#8b91a0"/>'
+      + '<rect x="290" y="270" width="220" height="220" rx="34" fill="url(#m)" '+st+'/><circle cx="400" cy="380" r="34" fill="none" stroke="'+c+'" stroke-width="7"/>'
+      + '<path d="M400 490 C400 590 540 560 540 650" stroke="#2a2e38" stroke-width="16" fill="none" stroke-linecap="round"/>';
+  } else if(kind==='powerbank'){
+    b = '<rect x="300" y="130" width="200" height="510" rx="44" fill="url(#m)" '+st+'/>'
+      + '<rect x="352" y="170" width="96" height="14" rx="7" fill="'+c+'"/>'
+      + '<circle cx="360" cy="300" r="9" fill="'+c+'"/><circle cx="392" cy="300" r="9" fill="'+c+'"/><circle cx="424" cy="300" r="9" fill="'+c+'" opacity=".4"/><circle cx="456" cy="300" r="9" fill="#fff" opacity=".2"/>'
+      + '<rect x="360" y="580" width="80" height="18" rx="9" fill="#05060a"/>';
+  } else {
+    b = '<rect x="270" y="270" width="260" height="260" rx="44" fill="url(#m)" '+st+'/>'
+      + '<circle cx="400" cy="400" r="70" fill="none" stroke="'+c+'" stroke-width="8"/><circle cx="400" cy="400" r="22" fill="'+c+'" opacity=".8"/>'
+      + '<polygon points="270,270 420,270 270,420" fill="url(#hl)"/>';
+  }
+  return head + b + '</svg>';
+}
+function artUri(kind, hue){
+  const k = kind+'|'+hue;
+  if(!artCache[k]) artCache[k] = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(artSvg(kind,hue))));
+  return artCache[k];
+}
+function pimg(p){ return (p.images && p.images[0]) ? p.images[0] : artUri(p.kind||'generic', hueFor(p)); }
+function catBg(c){
+  const p = visibleProducts().find(x=>x.category===c.slug);
+  return p ? thumbBg(p) : 'background:linear-gradient(135deg,#141824,#1c2030);';
+}
+
+/* =========================================================================
+   VALIDATION + SMALL HELPERS
+   ========================================================================= */
+function clean(s){ return String(s==null?'':s).trim().replace(/[<>"]/g, ch=>({'<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
+function slugify(s, fb){ const v = String(s).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); return (v || fb || 'item') ; }
+function imgErr(e){
+  const m = e && e.message;
+  toast(m==='size' ? 'Image is too large (max 15 MB).' : (m==='type'||m==='format') ? 'Unsupported image format. Use JPG, PNG or WEBP.' : 'Could not read image', 'err');
+}
+function validateCoupon(code, sub){
+  const c = state.coupons.find(x=>x.code===code);
+  if(!c || !c.active) return {ok:false, msg:'Invalid or expired coupon.'};
+  if(c.expires && new Date(c.expires+'T23:59:59') < new Date()) return {ok:false, msg:'Invalid or expired coupon.'};
+  if((c.used||0) >= (c.usageLimit||Infinity)) return {ok:false, msg:'This coupon has reached its usage limit.'};
+  if(sub < c.minOrder) return {ok:false, msg:'Requires a minimum order of '+money(c.minOrder)+'.'};
+  return {ok:true, c};
+}
+function applyCouponFromCheckout(){
+  const code = document.getElementById('ck_coupon').value.trim().toUpperCase();
+  if(!code){ checkoutState.couponCode = null; render(true); return; }
+  const v = validateCoupon(code, cartSubtotal());
+  if(!v.ok){ toast(v.msg, 'err'); return; }
+  checkoutState.couponCode = code; toast('Coupon applied','ok'); render(true);
+}
+function storageMeter(){
+  const kb = Math.round(JSON.stringify(state).length/1024);
+  const pct = Math.min(100, Math.round(kb/50));
+  return '<div style="margin:22px 0 16px;"><div style="font-size:.78rem;color:var(--ink-dim);margin-bottom:6px;">Storage used: <span class="mono">'+kb+' KB</span> / ~5,000 KB</div>'
+    + '<div style="height:6px;border-radius:6px;background:var(--panel2);overflow:hidden;"><div style="height:100%;width:'+pct+'%;background:'+(pct>80?'var(--warn)':'var(--lume)')+';"></div></div></div>';
+}
+document.addEventListener('click', e=>{
+  const sb = document.getElementById('adminSidebar');
+  if(sb && sb.classList.contains('open') && !sb.contains(e.target) && !e.target.closest('#adminMenuBtn')) sb.classList.remove('open');
+});
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeAllOverlays(); });
+
+/* nav bindings */
+document.querySelectorAll('.bn-item').forEach(b=> b.addEventListener('click', ()=> nav(b.dataset.nav)));
+document.getElementById('menuBtn').addEventListener('click', ()=> nav('/categories'));
+
+applyLang();
+render();
+if(!STORAGE_OK) setTimeout(()=>toast('Private mode: changes will not be kept after closing the page.','err'),3000);
+</script>
+</body>
+</html>
