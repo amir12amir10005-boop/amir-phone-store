@@ -1485,9 +1485,9 @@ function checkoutStep4(sub,shipCost,disc,total,lines){
       <button class="btn primary" style="flex:2;" id="confirmBtn" onclick="confirmOrder()">Confirm order</button>
     </div>`;
 }
-function confirmOrder(){
+async function confirmOrder(){
   const btn = document.getElementById('confirmBtn');
-  if(btn.disabled) return;
+  if(!btn || btn.disabled) return;
   btn.disabled = true; btn.textContent = 'Placing order…';
   const lines = cartLines();
   for(const l of lines){
@@ -1499,23 +1499,52 @@ function confirmOrder(){
   const shipCost = sub>FREE_SHIP ? 0 : shipOpt.cost;
   const disc = couponDiscount(sub);
   const total = Math.max(0, sub+shipCost-disc);
-  const order = {
+  const customer = {...checkoutState.customer};
+  const localOrder = {
     id: 'BG'+Date.now().toString().slice(-8),
     items: lines.map(l=>({productId:l.p.id, name:l.p.name, qty:l.qty, price:l.unit})),
-    customer: {...checkoutState.customer},
+    customer,
     shipping: {...checkoutState.shipping, name:shipOpt.name, eta:shipOpt.eta},
-    payment: {method:checkoutState.payment.method, status: checkoutState.payment.method==='cod'?'pending':'pending'},
+    payment: {method:checkoutState.payment.method, status:'pending'},
     coupon: disc>0 ? checkoutState.couponCode : null,
     subtotal:sub, shippingCost:shipCost, discount:disc, total,
     status:'Pending', createdAt:Date.now(),
   };
+  try{
+    if(!window.amirSupabase) throw new Error('تعذّر الاتصال بقاعدة البيانات. أعد تحميل الصفحة وحاول مجدداً.');
+    const {data:savedOrder,error:orderError}=await window.amirSupabase.from('orders').insert({
+      customer_name:customer.name||'',
+      phone:customer.phone||'',
+      address:customer.address||'',
+      wilaya:customer.city||customer.wilaya||'',
+      total,
+      status:'pending'
+    }).select('id,created_at').single();
+    if(orderError) throw orderError;
+    const itemRows=lines.map(l=>({
+      order_id:savedOrder.id,
+      product_id:null,
+      product_name:l.p.name,
+      quantity:l.qty,
+      unit_price:l.unit
+    }));
+    const {error:itemError}=await window.amirSupabase.from('order_items').insert(itemRows);
+    if(itemError) throw new Error('تم تسجيل الطلب، لكن تعذّر حفظ تفاصيل المنتجات: '+itemError.message);
+    localOrder.id=savedOrder.id;
+    localOrder.createdAt=savedOrder.created_at?new Date(savedOrder.created_at).getTime():Date.now();
+  }catch(e){
+    console.error('Order submission failed:',e);
+    toast(e.message||'لم نتمكن من تسجيل الطلب. حاول مرة أخرى.','err');
+    btn.disabled=false;btn.textContent='Confirm order';
+    return;
+  }
   lines.forEach(l=>{ const p = state.products.find(x=>x.id===l.p.id); p.stock -= l.qty; });
   if(disc>0){ const cc = state.coupons.find(x=>x.code===checkoutState.couponCode); if(cc) cc.used = (cc.used||0)+1; }
-  state.orders.unshift(order);
+  state.orders.unshift(localOrder);
   state.cart = [];
   checkoutState = { step:1, customer:{}, shipping:{method:'standard',cost:1300,eta:'3–5 days'}, payment:{method:'cod'}, couponCode:null };
   persist(); updateCartBadge();
-  nav('/order/'+order.id);
+  nav('/order/'+localOrder.id);
 }
 route('/order/:id', (params)=>{
   const o = state.orders.find(x=>x.id===params.id);
