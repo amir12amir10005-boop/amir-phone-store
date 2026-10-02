@@ -1426,7 +1426,7 @@ function ckNext1(){
   const name=g('cf_name'), phone=g('cf_phone'), email=g('cf_email'), wilaya=g('cf_wilaya');
   const err = document.getElementById('cf_err');
   if(!name||!phone||!email||!wilaya){ err.textContent='Please fill in all required fields.'; return; }
-  if(!/^\\S+@\\S+\\.\\S+$/.test(email)){ err.textContent='Enter a valid email address.'; return; }
+  if(!/^\S+@\S+\.\S+$/.test(email)){ err.textContent='Enter a valid email address.'; return; }
   if(phone.replace(/\\D/g,'').length<7){ err.textContent='Enter a valid phone number.'; return; }
   checkoutState.customer = {name:clean(name),phone:clean(phone),email:clean(email),wilaya:clean(wilaya)};
   checkoutState.step=2; render();
