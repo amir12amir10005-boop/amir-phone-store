@@ -1601,23 +1601,30 @@ async function customerAuthSubmit(){
 }
 async function customerLogout(){if(window.amirSupabase)await window.amirSupabase.auth.signOut();CUSTOMER_USER=null;nav('/login');}
 
+let customerOrdersRefreshTimer=null;
+async function loadCustomerOrders(){
+ if(!window.amirSupabase||!CUSTOMER_USER)return;
+ try{
+  const {data:orders,error}=await window.amirSupabase.from('orders').select('id,total,status,created_at').eq('user_id',CUSTOMER_USER.id).order('created_at',{ascending:false});
+  if(error)throw error;
+  const ids=(orders||[]).map(o=>o.id);
+  let items=[];
+  if(ids.length){const r=await window.amirSupabase.from('order_items').select('order_id,product_name,quantity,unit_price').in('order_id',ids);if(r.error)throw r.error;items=r.data||[];}
+  const grouped={};items.forEach(it=>(grouped[it.order_id]||(grouped[it.order_id]=[])).push(it));
+  state.orders=(orders||[]).map(o=>({id:o.id,total:Number(o.total)||0,status:String(o.status||'pending'),createdAt:new Date(o.created_at).getTime(),items:(grouped[o.id]||[]).map(it=>({name:it.product_name,qty:it.quantity,price:Number(it.unit_price)||0}))}));
+  const host=document.getElementById('customerOrdersList');if(host)host.innerHTML=customerOrdersHtml(state.orders);
+ }catch(e){console.error('Customer order refresh failed:',e);const host=document.getElementById('customerOrdersList');if(host)host.innerHTML='<p style="color:var(--bad)">تعذر تحديث الطلبات: '+clean(e.message||'خطأ غير معروف')+'</p>';}
+}
+function customerOrdersHtml(orders){
+ const labels={pending:'قيد الانتظار',confirmed:'مؤكد',preparing:'قيد التحضير',shipped:'تم الشحن',delivered:'تم التسليم',cancelled:'ملغي'};
+ return orders.length?orders.map(o=>'<div style="display:flex;justify-content:space-between;align-items:center;padding:14px;border:1px solid var(--line);border-radius:14px;margin-bottom:10px;cursor:pointer;" onclick="nav(\'/order/'+o.id+'\')"><div><div class="mono" style="font-size:.85rem;">#'+o.id.slice(0,8).toUpperCase()+'</div><div style="font-size:.75rem;color:var(--ink-dim);">'+new Date(o.createdAt).toLocaleDateString('ar-DZ')+' · '+o.items.length+' منتج</div></div><div style="text-align:right;"><div style="font-weight:500;">'+money(o.total)+'</div><span class="pill '+o.status.toLowerCase()+'">'+(labels[o.status.toLowerCase()]||o.status)+'</span></div></div>').join(''):'<div class="empty">لا توجد طلبات بعد.<div><button class="btn primary" onclick="nav(\'/shop\')">ابدأ التسوق</button></div></div>';
+}
 route('/account', ()=>{
-  setTitle('Account');
-  const orders = state.orders;
-  const wl = visibleProducts().filter(p=>state.wishlist.includes(p.id));
-  return `<div class="container" style="padding-top:18px;">
-    <h1 style="font-size:1.4rem;margin:0 0 6px;">Your orders</h1><button class="btn ghost sm" onclick="customerLogout()">تسجيل الخروج</button>
-    <div style="font-size:.78rem;color:var(--ink-dim);margin-bottom:16px;">Demo account view — orders placed on this device.</div>
-    ${orders.length? orders.map(o=>`
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:14px;border:1px solid var(--line);border-radius:14px;margin-bottom:10px;cursor:pointer;" onclick="nav('/order/${o.id}')">
-        <div><div class="mono" style="font-size:.85rem;">#${o.id}</div><div style="font-size:.75rem;color:var(--ink-dim);">${new Date(o.createdAt).toLocaleDateString()} · ${o.items.length} item(s)</div></div>
-        <div style="text-align:right;"><div style="font-weight:500;">${money(o.total)}</div><span class="pill ${o.status.toLowerCase()}">${o.status}</span></div>
-      </div>`).join('') : `<div class="empty">No orders yet.<div><button class="btn primary" onclick="nav('/shop')">Start shopping</button></div></div>`}
-    ${wl.length?`<h2 class="h" style="font-size:1.1rem;margin:24px 0 12px;">Wishlist</h2><div class="grid2">${wl.map(productCard).join('')}</div>`:''}
-    <div style="margin-top:26px;padding-top:16px;border-top:1px solid var(--line);">
-      ${IS_OWNER?'<a href="#/admin" style="font-size:.8rem;color:var(--ink-dim);text-decoration:none;">Store administrator? →</a>':''}
-    </div>
-  </div>`;
+ setTitle('Account');
+ const wl=visibleProducts().filter(p=>state.wishlist.includes(p.id));
+ if(customerOrdersRefreshTimer)clearInterval(customerOrdersRefreshTimer);
+ setTimeout(()=>{loadCustomerOrders();customerOrdersRefreshTimer=setInterval(()=>{if(location.hash==='#/account')loadCustomerOrders();else{clearInterval(customerOrdersRefreshTimer);customerOrdersRefreshTimer=null;}},10000);},0);
+ return `<div class="container" style="padding-top:18px;"><h1 style="font-size:1.4rem;margin:0 0 6px;">طلباتي</h1><button class="btn ghost sm" onclick="customerLogout()">تسجيل الخروج</button><div style="font-size:.78rem;color:var(--ink-dim);margin:12px 0;">تتحدث حالة الطلبات تلقائياً كل 10 ثوانٍ.</div><div id="customerOrdersList">جارٍ تحميل طلباتك…</div>${wl.length?`<h2 class="h" style="font-size:1.1rem;margin:24px 0 12px;">Wishlist</h2><div class="grid2">${wl.map(productCard).join('')}</div>`:''}</div>`;
 });
 
 function notFoundView(){ return `<div class="container"><div class="empty">Page not found.<div><button class="btn primary" onclick="nav('/home')">Back home</button></div></div></div>`; }
