@@ -1409,26 +1409,22 @@ route('/checkout', ()=>{
 function checkoutStep1(){
   const c = checkoutState.customer;
   return `
-    <div class="field"><label>Full name</label><input id="cf_name" value="${c.name||''}"></div>
+    <div class="field"><label>Full name</label><input id="cf_name" value="${c.name||''}" autocomplete="name" required></div>
     <div class="row2">
-      <div class="field"><label>Phone number</label><input id="cf_phone" value="${c.phone||''}"></div>
-      <div class="field"><label>Email</label><input id="cf_email" value="${c.email||''}"></div>
-    </div>
-    <div class="row2">
-      <div class="field"><label>Country</label><input id="cf_country" value="${c.country||''}"></div>
-      <div class="field"><label>State / Province</label><input id="cf_state" value="${c.state||''}"></div>
+      <div class="field"><label>Phone number</label><input id="cf_phone" type="tel" value="${c.phone||''}" autocomplete="tel" required></div>
+      <div class="field"><label>Email</label><input id="cf_email" type="email" value="${c.email||''}" autocomplete="email" required></div>
     </div>
     <div id="cf_err" style="color:var(--bad);font-size:.82rem;margin-bottom:10px;"></div>
     <button class="btn primary block" onclick="ckNext1()">Continue to shipping</button>`;
 }
 function ckNext1(){
   const g = id=>document.getElementById(id).value.trim();
-  const name=g('cf_name'), phone=g('cf_phone'), email=g('cf_email'), country=g('cf_country'), st=g('cf_state');
+  const name=g('cf_name'), phone=g('cf_phone'), email=g('cf_email');
   const err = document.getElementById('cf_err');
-  if(!name||!phone||!email||!country){ err.textContent='Please fill in all required fields.'; return; }
-  if(!/^\S+@\S+\.\S+$/.test(email)){ err.textContent='Enter a valid email address.'; return; }
-  if(phone.replace(/\D/g,'').length<7){ err.textContent='Enter a valid phone number.'; return; }
-  checkoutState.customer = {name:clean(name),phone:clean(phone),email:clean(email),country:clean(country),state:clean(st)};
+  if(!name||!phone||!email){ err.textContent='Please fill in all required fields.'; return; }
+  if(!/^\\S+@\\S+\\.\\S+$/.test(email)){ err.textContent='Enter a valid email address.'; return; }
+  if(phone.replace(/\\D/g,'').length<7){ err.textContent='Enter a valid phone number.'; return; }
+  checkoutState.customer = {name:clean(name),phone:clean(phone),email:clean(email)};
   checkoutState.step=2; render();
 }
 function checkoutStep2(shipCost,sub){
@@ -1512,7 +1508,7 @@ async function confirmOrder(){
       p_customer_name:customer.name||'',
       p_phone:customer.phone||'',
       p_address:'',
-      p_wilaya:customer.state||customer.wilaya||'',
+      p_wilaya:'',
       p_total:total,
       p_items:lines.map(l=>({product_name:l.p.name,quantity:l.qty,unit_price:l.unit}))
     });
