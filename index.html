@@ -1571,7 +1571,7 @@ async function adminLogin(){
   if(!email){ if(msg)msg.textContent='Enter your email.'; return; }
   if(email!=='amir.phone.35dz@gmail.com'){ if(msg)msg.textContent='This email is not authorized.'; return; }
   if(!window.amirSupabase){if(msg)msg.textContent='Secure sign-in is unavailable. Refresh and try again.';return;}
-  try{const {error}=await window.amirSupabase.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+location.pathname+'?auth_callback=1',shouldCreateUser:false}});if(error)throw error;if(msg)msg.textContent='Check your inbox and open the sign-in link on this device.';}
+  try{const {error}=await window.amirSupabase.auth.signInWithOtp({email,options:{emailRedirectTo:'https://amir12amir10005-boop.github.io/amir-phone-store/?auth_callback=1',shouldCreateUser:false}});if(error)throw error;if(msg)msg.textContent='Check your inbox and open the sign-in link on this device.';}
   catch(e){if(msg)msg.textContent=e.message||'Could not send sign-in link.';}
 }
 async function adminLogout(){if(window.amirSupabase)await window.amirSupabase.auth.signOut();IS_OWNER=false;nav('/home');}
