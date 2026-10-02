@@ -517,6 +517,15 @@ function saveDB(s){
   return ok;
 }
 let state = loadDB();
+// Recover gracefully if an old browser cache is incomplete or malformed.
+if(!state || typeof state !== 'object') state = {};
+if(!Array.isArray(state.products) || state.products.length===0) state.products = seedProducts();
+if(!Array.isArray(state.categories) || state.categories.length===0) state.categories = seedCategories();
+if(!Array.isArray(state.coupons)) state.coupons = [];
+if(!Array.isArray(state.orders)) state.orders = [];
+if(!Array.isArray(state.cart)) state.cart = [];
+if(!Array.isArray(state.wishlist)) state.wishlist = [];
+if(!state.settings || typeof state.settings !== 'object') state.settings = {storeName:'Amir Phone',description:'Premium electronics',currency:'DZD',dzd:true};
 if(!state.lang) state.lang = 'en';
 state.wishlist = state.wishlist||[]; state.recentSearches = state.recentSearches||[]; state.coupons = state.coupons||[]; state.orders = state.orders||[]; state.cart = state.cart||[];
 if(state.settings.storeName==='Baiga Phone') state.settings.storeName='Amir Phone';
@@ -2384,7 +2393,23 @@ document.getElementById('menuBtn').addEventListener('click', ()=>{
 });
 
 applyLang();
-(async function bootStore(){try{const {data,error}=await window.amirSupabase.from('store_state').select('payload').eq('id',1).maybeSingle();if(!error&&data?.payload&&Array.isArray(data.payload.products)&&data.payload.products.length){const p=data.payload;state.products=p.products;state.categories=p.categories||state.categories;state.coupons=p.coupons||state.coupons;state.settings=Object.assign({},state.settings,p.settings||{});saveDB(state);}}catch(e){console.warn('Using local catalog cache:',e);}render();})();
+(async function bootStore(){
+  try {
+    if(window.amirSupabase){
+      const {data,error}=await window.amirSupabase.from('store_state').select('payload').eq('id',1).maybeSingle();
+      if(error) throw error;
+      const p=data&&data.payload;
+      if(p&&Array.isArray(p.products)&&p.products.length){
+        state.products=p.products;
+        state.categories=Array.isArray(p.categories)&&p.categories.length?p.categories:state.categories;
+        state.coupons=Array.isArray(p.coupons)?p.coupons:state.coupons;
+        state.settings=Object.assign({},state.settings,p.settings||{});
+        saveDB(state);
+      }
+    }
+  } catch(e) { console.warn('Cloud catalog unavailable; showing local catalog instead:',e); }
+  try { render(); } catch(e) { console.error('Store render failed:',e); document.getElementById('app').innerHTML='<div class="container"><div class="empty">تعذّر عرض المنتجات. أعد تحميل الصفحة أو حاول لاحقًا.</div></div>'; }
+})();
 if(!STORAGE_OK) setTimeout(()=>toast('Private mode: changes will not be kept after closing the page.','err'),3000);
 </script>
 </body>
