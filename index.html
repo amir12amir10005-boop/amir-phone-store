@@ -1512,26 +1512,19 @@ async function confirmOrder(){
   };
   try{
     if(!window.amirSupabase) throw new Error('تعذّر الاتصال بقاعدة البيانات. أعد تحميل الصفحة وحاول مجدداً.');
-    const {data:savedOrder,error:orderError}=await window.amirSupabase.from('orders').insert({
-      customer_name:customer.name||'',
-      phone:customer.phone||'',
-      address:customer.address||'',
-      wilaya:customer.city||customer.wilaya||'',
-      total,
-      status:'pending'
-    }).select('id,created_at').single();
+    const {data:savedOrder,error:orderError}=await window.amirSupabase.rpc('place_store_order',{
+      p_customer_name:customer.name||'',
+      p_phone:customer.phone||'',
+      p_address:customer.address||'',
+      p_wilaya:customer.city||customer.wilaya||'',
+      p_total:total,
+      p_items:lines.map(l=>({product_name:l.p.name,quantity:l.qty,unit_price:l.unit}))
+    });
     if(orderError) throw orderError;
-    const itemRows=lines.map(l=>({
-      order_id:savedOrder.id,
-      product_id:null,
-      product_name:l.p.name,
-      quantity:l.qty,
-      unit_price:l.unit
-    }));
-    const {error:itemError}=await window.amirSupabase.from('order_items').insert(itemRows);
-    if(itemError) throw new Error('تم تسجيل الطلب، لكن تعذّر حفظ تفاصيل المنتجات: '+itemError.message);
-    localOrder.id=savedOrder.id;
-    localOrder.createdAt=savedOrder.created_at?new Date(savedOrder.created_at).getTime():Date.now();
+    const placed=Array.isArray(savedOrder)?savedOrder[0]:savedOrder;
+    if(!placed?.order_id) throw new Error('لم تُرجع قاعدة البيانات رقم الطلب.');
+    localOrder.id=placed.order_id;
+    localOrder.createdAt=placed.created_at?new Date(placed.created_at).getTime():Date.now();
   }catch(e){
     console.error('Order submission failed:',e);
     toast(e.message||'لم نتمكن من تسجيل الطلب. حاول مرة أخرى.','err');
