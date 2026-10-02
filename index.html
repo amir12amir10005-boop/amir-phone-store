@@ -317,7 +317,28 @@ body.admin-mode{padding-bottom:0;}
   </div>
 </header>
 
-<main id="app"></main>
+<main id="app">
+  <section style="min-height:62vh;padding:42px 18px 28px;text-align:center;background:radial-gradient(ellipse at 50% 15%,#242033 0%,#08090c 65%);">
+    <div style="margin:8px auto 20px;width:min(68vw,300px);height:260px;display:grid;place-items:center;">
+      <div style="width:150px;height:260px;border:3px solid #a94a68;border-radius:28px;background:linear-gradient(145deg,#4b1028,#100b12 75%);box-shadow:0 20px 70px #8a183744;position:relative;">
+        <div style="position:absolute;top:9px;left:50%;transform:translateX(-50%);width:54px;height:14px;border-radius:20px;background:#050509;"></div>
+        <div style="position:absolute;inset:42px 12px 16px;border-radius:16px;background:linear-gradient(135deg,#7d2344,#17111a 65%);"></div>
+      </div>
+    </div>
+    <p style="color:#9aa0aa;letter-spacing:.12em;font-size:.75rem;">AMIR PHONE</p>
+    <h1 style="font-size:clamp(1.7rem,6vw,2.6rem);margin:8px 0;">كل ما تحتاجه لأجهزتك</h1>
+    <p style="color:#9aa0aa;max-width:440px;margin:0 auto 22px;">اكتشف إكسسوارات الهواتف والأجهزة الإلكترونية في متجر أمير فون.</p>
+    <a href="#/shop" style="display:inline-block;background:#eef0f3;color:#08090c;padding:13px 28px;border-radius:30px;text-decoration:none;font-weight:600;">تصفح المنتجات</a>
+  </section>
+  <section style="padding:22px 16px;text-align:center;">
+    <h2>تسوق حسب القسم</h2>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+      <a href="#/categories" style="padding:12px 18px;border:1px solid #343640;border-radius:12px;text-decoration:none;">الهواتف والإكسسوارات</a>
+      <a href="#/categories" style="padding:12px 18px;border:1px solid #343640;border-radius:12px;text-decoration:none;">الساعات الذكية</a>
+      <a href="#/categories" style="padding:12px 18px;border:1px solid #343640;border-radius:12px;text-decoration:none;">الصوتيات</a>
+    </div>
+  </section>
+</main>
 
 <nav id="bottomnav">
   <button class="bn-item" data-nav="#/home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg><span class="bn-label">Home</span></button>
