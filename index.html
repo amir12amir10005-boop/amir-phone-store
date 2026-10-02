@@ -1858,7 +1858,19 @@ route('/admin/orders', ()=>{
 });
 async function loadAdminOrders(){
   const host=document.getElementById('cloudOrders'); if(!host)return;
-  if(!IS_OWNER || !window.amirSupabase){host.textContent='سجّل الدخول بحساب صاحب المتجر لعرض الطلبات.';return;}
+  if(!window.amirSupabase){host.textContent='تعذّر الاتصال بقاعدة البيانات. أعد تحميل الصفحة.';return;}
+  // Re-check the active Supabase session and authorized owner record every time
+  // the orders panel opens; do not rely only on a localStorage flag.
+  try{
+    const {data:{session},error:sessionError}=await window.amirSupabase.auth.getSession();
+    if(sessionError) throw sessionError;
+    const email=(session?.user?.email||'').trim().toLowerCase();
+    if(!email){IS_OWNER=false;host.textContent='سجّل الدخول بحساب صاحب المتجر لعرض الطلبات.';return;}
+    const {data:owner,error:ownerError}=await window.amirSupabase.from('store_admins').select('email').ilike('email',email).maybeSingle();
+    if(ownerError) throw ownerError;
+    if(!owner){IS_OWNER=false;host.textContent='هذا الحساب غير مخوّل لعرض الطلبات.';return;}
+    IS_OWNER=true;
+  }catch(authErr){console.error('Owner verification failed:',authErr);host.textContent='تعذّر التحقق من صلاحية الحساب: '+clean(authErr.message||'خطأ غير معروف');return;}
   host.textContent='جارٍ تحميل الطلبات…';
   const STATUSES=['pending','confirmed','preparing','shipped','delivered','cancelled'];
   const labels={pending:'قيد الانتظار',confirmed:'مؤكد',preparing:'قيد التحضير',shipped:'تم الشحن',delivered:'تم التسليم',cancelled:'ملغي'};
