@@ -2505,7 +2505,11 @@ document.querySelectorAll('.bn-item').forEach(b=> b.addEventListener('click', ()
 document.getElementById('menuBtn').addEventListener('click', ()=> nav('/categories'));
 
 applyLang();
-render();
+render().catch(err=>{
+  console.error('Store render failed:',err);
+  const app=document.getElementById('app');
+  if(app) app.innerHTML='<div class="container" style="padding:24px;color:#ff7b7b"><h2>Store loading error</h2><p>'+String(err&&err.message||err)+'</p><button class="btn primary" onclick="location.reload()">Reload</button></div>';
+});
 if(!STORAGE_OK) setTimeout(()=>toast('Private mode: changes will not be kept after closing the page.','err'),3000);
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
