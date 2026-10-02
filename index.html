@@ -510,8 +510,8 @@ if(!state.settings.dzd){
 function persist(){ return saveDB(state); }
 
 /* ---------- Owner-only management + publishing ---------- */
-let IS_OWNER = (typeof window.claude === 'undefined');   // plain local copy = demo mode; published page = verified owner only
-let OWNER_READY = IS_OWNER;
+let IS_OWNER = false; // Never grant owner access on a public static site without verified authentication.
+let OWNER_READY = true;
 let ART = null;
 if(!IS_OWNER){
   (async()=>{
