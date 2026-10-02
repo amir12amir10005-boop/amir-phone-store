@@ -539,8 +539,15 @@ const OWNER_EMAIL='amir.phone.35dz@gmail.com';
   try{
     const {data:{session}}=await window.amirSupabase.auth.getSession();
     IS_OWNER=!!(session?.user?.email?.toLowerCase()===OWNER_EMAIL);
-    window.amirSupabase.auth.onAuthStateChange((_event,s)=>{IS_OWNER=!!(s?.user?.email?.toLowerCase()===OWNER_EMAIL);OWNER_READY=true;const p=(location.hash.slice(1)||'/home').split('?')[0];if(p.startsWith('/admin'))render(true);});
-  }catch(e){IS_OWNER=false;}
+    window.amirSupabase.auth.onAuthStateChange((event,s)=>{
+      IS_OWNER=!!(s?.user?.email?.toLowerCase()===OWNER_EMAIL);
+      OWNER_READY=true;
+      const p=(location.hash.slice(1)||'/home').split('?')[0];
+      if(IS_OWNER && (p==='/admin/login'||new URLSearchParams(location.search).has('auth_callback'))) nav('/admin');
+      else if(p.startsWith('/admin')) render(true);
+    });
+    if(IS_OWNER && new URLSearchParams(location.search).has('auth_callback')){history.replaceState(null,'',location.pathname);nav('/admin');}
+  }catch(e){console.error('Auth initialization failed:',e);IS_OWNER=false;}
   OWNER_READY=true;
   const p=(location.hash.slice(1)||'/home').split('?')[0];if(p.startsWith('/admin')||p==='/account')render(true);
 })();
@@ -1564,7 +1571,7 @@ async function adminLogin(){
   if(!email){ if(msg)msg.textContent='Enter your email.'; return; }
   if(email!=='amir.phone.35dz@gmail.com'){ if(msg)msg.textContent='This email is not authorized.'; return; }
   if(!window.amirSupabase){if(msg)msg.textContent='Secure sign-in is unavailable. Refresh and try again.';return;}
-  try{const {error}=await window.amirSupabase.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+location.pathname+'#/admin'}});if(error)throw error;if(msg)msg.textContent='Check your inbox and open the sign-in link on this device.';}
+  try{const {error}=await window.amirSupabase.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+location.pathname+'?auth_callback=1',shouldCreateUser:false}});if(error)throw error;if(msg)msg.textContent='Check your inbox and open the sign-in link on this device.';}
   catch(e){if(msg)msg.textContent=e.message||'Could not send sign-in link.';}
 }
 async function adminLogout(){if(window.amirSupabase)await window.amirSupabase.auth.signOut();IS_OWNER=false;nav('/home');}
