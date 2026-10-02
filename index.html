@@ -542,22 +542,27 @@ function persist(){ return saveDB(state); }
 /* ---------- Owner-only management + publishing ---------- */
 let IS_OWNER = false;
 let OWNER_READY = false;
+let CUSTOMER_READY = false;
+let CUSTOMER_USER = null;
 let ART = null;
 const OWNER_EMAIL=()=>((localStorage.getItem("amir_owner_email")||"").trim().toLowerCase());
 (async()=>{
   try{
     const {data:{session}}=await window.amirSupabase.auth.getSession();
+    CUSTOMER_USER=session?.user||null; CUSTOMER_READY=true;
     IS_OWNER=!!(session?.user?.email?.toLowerCase()===OWNER_EMAIL());
     window.amirSupabase.auth.onAuthStateChange((event,s)=>{
+      CUSTOMER_USER=s?.user||null; CUSTOMER_READY=true;
       IS_OWNER=!!(s?.user?.email?.toLowerCase()===OWNER_EMAIL());
       OWNER_READY=true;
       const p=(location.hash.slice(1)||'/home').split('?')[0];
       if(IS_OWNER && (p==='/admin/login'||new URLSearchParams(location.search).has('auth_callback'))) nav('/admin');
       else if(p.startsWith('/admin')) render(true);
+      else if(p!=='/login') render(true);
     });
     if(IS_OWNER && new URLSearchParams(location.search).has('auth_callback')){history.replaceState(null,'',location.pathname);nav('/admin');}
-  }catch(e){console.error('Auth initialization failed:',e);IS_OWNER=false;}
-  OWNER_READY=true;
+  }catch(e){console.error('Auth initialization failed:',e);IS_OWNER=false;CUSTOMER_USER=null;CUSTOMER_READY=true;}
+  OWNER_READY=true; CUSTOMER_READY=true;
   const p=(location.hash.slice(1)||'/home').split('?')[0];if(p.startsWith('/admin')||p==='/account')render(true);
 })();
 function catalogSnapshot(){
@@ -656,6 +661,10 @@ function render(keepScroll){
   const {path, params:qp} = parseHash();
   unmountViewer();
   if(keepScroll!==true) closeAllOverlays();
+  if(!path.startsWith('/admin') && path!=='/login'){
+    if(!CUSTOMER_READY){ document.getElementById('app').innerHTML='<div class="container"><div class="empty">Checking sign-in…</div></div>'; return; }
+    if(!CUSTOMER_USER){ document.body.classList.remove('admin-mode'); nav('/login'); return; }
+  }
   if(path.startsWith('/admin') && path!=='/admin/login'){
     const appEl = document.getElementById('app');
     if(!OWNER_READY){ appEl.innerHTML = '<div class="container"><div class="empty">Checking access…</div></div>'; return; }
@@ -1557,12 +1566,25 @@ route('/order/:id', (params)=>{
     <button class="btn block" onclick="nav('/shop')">Continue shopping</button>
   </div>`;
 });
+route('/login', ()=>{
+  setTitle('Sign in');
+  if(CUSTOMER_USER) return '<div class="container"><div class="empty">You are signed in. <button class="btn primary" onclick="nav(\'/home\')">Continue to store</button></div></div>';
+  return '<div class="container" style="max-width:420px;padding-top:50px;">'+'<h1>تسجيل الدخول</h1>'+'<p>سجّل الدخول أولاً لتتمكن من استخدام المتجر وحفظ طلباتك في حسابك.</p>'+'<div class="field"><label>البريد الإلكتروني</label><input id="customer_email" type="email" autocomplete="email" placeholder="name@example.com"></div>'+'<button class="btn primary block" onclick="customerLogin()">إرسال رابط تسجيل الدخول</button><p id="customerAuthMessage" role="status"></p></div>';
+});
+async function customerLogin(){
+ const email=(document.getElementById('customer_email')?.value||'').trim().toLowerCase(); const msg=document.getElementById('customerAuthMessage');
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){if(msg)msg.textContent='أدخل بريداً إلكترونياً صحيحاً.';return;}
+ if(!window.amirSupabase){if(msg)msg.textContent='خدمة تسجيل الدخول غير متاحة حالياً.';return;}
+ try{const {error}=await window.amirSupabase.auth.signInWithOtp({email,options:{emailRedirectTo:'https://amir12amir10005-boop.github.io/amir-phone-store/?auth_callback=1'}});if(error)throw error;if(msg)msg.textContent='تم إرسال رابط الدخول إلى بريدك. افتحه للعودة إلى المتجر.';}catch(e){if(msg)msg.textContent=e.message||'تعذر إرسال رابط الدخول.';}
+}
+async function customerLogout(){if(window.amirSupabase)await window.amirSupabase.auth.signOut();CUSTOMER_USER=null;nav('/login');}
+
 route('/account', ()=>{
   setTitle('Account');
   const orders = state.orders;
   const wl = visibleProducts().filter(p=>state.wishlist.includes(p.id));
   return `<div class="container" style="padding-top:18px;">
-    <h1 style="font-size:1.4rem;margin:0 0 6px;">Your orders</h1>
+    <h1 style="font-size:1.4rem;margin:0 0 6px;">Your orders</h1><button class="btn ghost sm" onclick="customerLogout()">تسجيل الخروج</button>
     <div style="font-size:.78rem;color:var(--ink-dim);margin-bottom:16px;">Demo account view — orders placed on this device.</div>
     ${orders.length? orders.map(o=>`
       <div style="display:flex;justify-content:space-between;align-items:center;padding:14px;border:1px solid var(--line);border-radius:14px;margin-bottom:10px;cursor:pointer;" onclick="nav('/order/${o.id}')">
