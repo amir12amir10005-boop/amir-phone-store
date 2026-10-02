@@ -557,10 +557,12 @@ const OWNER_EMAIL=()=>((localStorage.getItem("amir_owner_email")||"").trim().toL
       OWNER_READY=true;
       const p=(location.hash.slice(1)||'/home').split('?')[0];
       if(IS_OWNER && (p==='/admin/login'||new URLSearchParams(location.search).has('auth_callback'))) nav('/admin');
+      else if(CUSTOMER_USER && new URLSearchParams(location.search).has('auth_callback')){history.replaceState(null,'',location.pathname);nav('/home');}
       else if(p.startsWith('/admin')) render(true);
       else if(p!=='/login') render(true);
     });
     if(IS_OWNER && new URLSearchParams(location.search).has('auth_callback')){history.replaceState(null,'',location.pathname);nav('/admin');}
+  else if(CUSTOMER_USER && new URLSearchParams(location.search).has('auth_callback')){history.replaceState(null,'',location.pathname);nav('/home');}
   }catch(e){console.error('Auth initialization failed:',e);IS_OWNER=false;CUSTOMER_USER=null;CUSTOMER_READY=true;}
   OWNER_READY=true; CUSTOMER_READY=true;
   const p=(location.hash.slice(1)||'/home').split('?')[0];if(p.startsWith('/admin')||p==='/account')render(true);
