@@ -705,7 +705,7 @@ function matchRoute(path){
 }
 
 function errorView(){ return '<div class="container"><div class="empty">Something went wrong loading this page.<div><button class="btn primary" onclick="location.reload()">Reload</button></div></div></div>'; }
-function render(keepScroll){
+async function render(keepScroll){
   const y = window.scrollY;
   const {path, params:qp} = parseHash();
   unmountViewer();
