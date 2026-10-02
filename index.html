@@ -1414,17 +1414,21 @@ function checkoutStep1(){
       <div class="field"><label>Phone number</label><input id="cf_phone" type="tel" value="${c.phone||''}" autocomplete="tel" required></div>
       <div class="field"><label>Email</label><input id="cf_email" type="email" value="${c.email||''}" autocomplete="email" required></div>
     </div>
+    <div class="field"><label>ولاية التوصيل / Wilaya</label><select id="cf_wilaya" required>
+      <option value="">اختر الولاية</option>
+      ${['أدرار','الشلف','الأغواط','أم البواقي','باتنة','بجاية','بسكرة','بشار','البليدة','البويرة','تمنراست','تبسة','تلمسان','تيارت','تيزي وزو','الجزائر','الجلفة','جيجل','سطيف','سعيدة','سكيكدة','سيدي بلعباس','عنابة','قالمة','قسنطينة','المدية','مستغانم','المسيلة','معسكر','ورقلة','وهران','البيض','إليزي','برج بوعريريج','بومرداس','الطارف','تندوف','تيسمسيلت','الوادي','خنشلة','سوق أهراس','تيبازة','ميلة','عين الدفلى','النعامة','عين تموشنت','غرداية','غليزان','تيميمون','برج باجي مختار','أولاد جلال','بني عباس','عين صالح','عين قزام','تقرت','جانت','المغير','المنيعة'].map(w=>`<option value="${w}" ${c.wilaya===w?'selected':''}>${w}</option>`).join('')}
+    </select></div>
     <div id="cf_err" style="color:var(--bad);font-size:.82rem;margin-bottom:10px;"></div>
     <button class="btn primary block" onclick="ckNext1()">Continue to shipping</button>`;
 }
 function ckNext1(){
   const g = id=>document.getElementById(id).value.trim();
-  const name=g('cf_name'), phone=g('cf_phone'), email=g('cf_email');
+  const name=g('cf_name'), phone=g('cf_phone'), email=g('cf_email'), wilaya=g('cf_wilaya');
   const err = document.getElementById('cf_err');
-  if(!name||!phone||!email){ err.textContent='Please fill in all required fields.'; return; }
+  if(!name||!phone||!email||!wilaya){ err.textContent='Please fill in all required fields.'; return; }
   if(!/^\\S+@\\S+\\.\\S+$/.test(email)){ err.textContent='Enter a valid email address.'; return; }
   if(phone.replace(/\\D/g,'').length<7){ err.textContent='Enter a valid phone number.'; return; }
-  checkoutState.customer = {name:clean(name),phone:clean(phone),email:clean(email)};
+  checkoutState.customer = {name:clean(name),phone:clean(phone),email:clean(email),wilaya:clean(wilaya)};
   checkoutState.step=2; render();
 }
 function checkoutStep2(shipCost,sub){
@@ -1508,7 +1512,7 @@ async function confirmOrder(){
       p_customer_name:customer.name||'',
       p_phone:customer.phone||'',
       p_address:'',
-      p_wilaya:'',
+      p_wilaya:customer.wilaya||'',
       p_total:total,
       p_items:lines.map(l=>({product_name:l.p.name,quantity:l.qty,unit_price:l.unit}))
     });
