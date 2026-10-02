@@ -534,13 +534,13 @@ function persist(){ return saveDB(state); }
 let IS_OWNER = false;
 let OWNER_READY = false;
 let ART = null;
-const OWNER_EMAIL='amir.phone.35dz@gmail.com';
+const OWNER_EMAIL=()=>((localStorage.getItem("amir_owner_email")||"").trim().toLowerCase());
 (async()=>{
   try{
     const {data:{session}}=await window.amirSupabase.auth.getSession();
-    IS_OWNER=!!(session?.user?.email?.toLowerCase()===OWNER_EMAIL);
+    IS_OWNER=!!(session?.user?.email?.toLowerCase()===OWNER_EMAIL());
     window.amirSupabase.auth.onAuthStateChange((event,s)=>{
-      IS_OWNER=!!(s?.user?.email?.toLowerCase()===OWNER_EMAIL);
+      IS_OWNER=!!(s?.user?.email?.toLowerCase()===OWNER_EMAIL());
       OWNER_READY=true;
       const p=(location.hash.slice(1)||'/home').split('?')[0];
       if(IS_OWNER && (p==='/admin/login'||new URLSearchParams(location.search).has('auth_callback'))) nav('/admin');
@@ -1560,7 +1560,7 @@ route('/admin/login', ()=>{
   return `<div class="container" style="max-width:380px;padding-top:60px;">
     <h1 style="font-size:1.3rem;margin:0 0 6px;">Admin sign in</h1>
     <p style="font-size:.82rem;color:var(--ink-dim);margin-bottom:20px;">A secure sign-in link will be sent to the store owner's email.</p>
-    <div class="field"><label>Owner email</label><input id="al_user" type="email" autocomplete="email" value="amir.phone.35dz@gmail.com"></div>
+    <div class="field"><label>Owner email</label><input id="al_user" type="email" autocomplete="email" placeholder="أدخل بريد صاحب المتجر" value="${(localStorage.getItem("amir_owner_email")||"").replace(/&/g,"&amp;").replace(/"/g,"&quot;")}"></div>
     <button class="btn primary block" onclick="adminLogin()">Send secure sign-in link</button>
     <p id="authMessage" role="status" style="font-size:.8rem;margin-top:14px;"></p>
   </div>`;
@@ -1569,7 +1569,8 @@ async function adminLogin(){
   const email=(document.getElementById('al_user')?.value||'').trim().toLowerCase();
   const msg=document.getElementById('authMessage');
   if(!email){ if(msg)msg.textContent='Enter your email.'; return; }
-  if(email!=='amir.phone.35dz@gmail.com'){ if(msg)msg.textContent='This email is not authorized.'; return; }
+  if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)){ if(msg)msg.textContent='أدخل بريداً إلكترونياً صحيحاً.'; return; }
+  localStorage.setItem('amir_owner_email',email);
   if(!window.amirSupabase){if(msg)msg.textContent='Secure sign-in is unavailable. Refresh and try again.';return;}
   try{const {error}=await window.amirSupabase.auth.signInWithOtp({email,options:{emailRedirectTo:'https://amir12amir10005-boop.github.io/amir-phone-store/?auth_callback=1',shouldCreateUser:false}});if(error)throw error;if(msg)msg.textContent='Check your inbox and open the sign-in link on this device.';}
   catch(e){if(msg)msg.textContent=e.message||'Could not send sign-in link.';}
