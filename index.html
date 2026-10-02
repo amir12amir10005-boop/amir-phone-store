@@ -2343,7 +2343,14 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeAllOverlays(
 
 /* nav bindings */
 document.querySelectorAll('.bn-item').forEach(b=> b.addEventListener('click', ()=> nav(b.dataset.nav)));
-document.getElementById('menuBtn').addEventListener('click', ()=> nav('/categories'));
+document.getElementById('menuBtn').addEventListener('click', ()=>{
+  const items = [
+    ['#/home','Home'],['#/shop','Shop'],['#/categories','Categories'],
+    ['#/cart','Cart'],['#/account','Account']
+  ];
+  const html = '<div style="display:grid;gap:8px;padding:4px 0;">'+items.map(([href,label])=>'<a href="'+href+'" class="btn ghost block" style="text-align:start;text-decoration:none;" onclick="closeAllOverlays()">'+label+' <span style="float:right;">›</span></a>').join('')+'</div>';
+  openSheet('Menu',html,'',()=>{});
+});
 
 applyLang();
 render();
