@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>window.amirSupabase=window.supabase.createClient('https://babdksoiscxgeajsuvec.supabase.co','sb_publishable_w2oVXCZTmbZhqxKM9EnyWg_lcsRneSJ');</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Amir Phone</title>
@@ -515,21 +517,19 @@ if(!state.settings.dzd){
 function persist(){ return saveDB(state); }
 
 /* ---------- Owner-only management + publishing ---------- */
-let IS_OWNER = false; // Never grant owner access on a public static site without verified authentication.
-let OWNER_READY = true;
+let IS_OWNER = false;
+let OWNER_READY = false;
 let ART = null;
-if(!IS_OWNER){
-  (async()=>{
-    try{
-      const u = await window.claude.use('user');
-      IS_OWNER = !!(u && await u.isOwner());
-      if(IS_OWNER) ART = await window.claude.use('artifact');
-    }catch(e){ IS_OWNER = false; }
-    OWNER_READY = true;
-    const p = (location.hash.slice(1)||'/home').split('?')[0];
-    if(p.startsWith('/admin') || p==='/account') render(true);
-  })();
-}
+const OWNER_EMAIL='amir.phone.35dz@gmail.com';
+(async()=>{
+  try{
+    const {data:{session}}=await window.amirSupabase.auth.getSession();
+    IS_OWNER=!!(session?.user?.email?.toLowerCase()===OWNER_EMAIL);
+    window.amirSupabase.auth.onAuthStateChange((_event,s)=>{IS_OWNER=!!(s?.user?.email?.toLowerCase()===OWNER_EMAIL);OWNER_READY=true;const p=(location.hash.slice(1)||'/home').split('?')[0];if(p.startsWith('/admin'))render(true);});
+  }catch(e){IS_OWNER=false;}
+  OWNER_READY=true;
+  const p=(location.hash.slice(1)||'/home').split('?')[0];if(p.startsWith('/admin')||p==='/account')render(true);
+})();
 function catalogSnapshot(){
   return { products:state.products, categories:state.categories,
            coupons:state.coupons.map(c=>Object.assign({},c,{used:0})), settings:state.settings };
@@ -1538,19 +1538,22 @@ route('/admin/login', ()=>{
   setTitle('Admin login');
   return `<div class="container" style="max-width:380px;padding-top:60px;">
     <h1 style="font-size:1.3rem;margin:0 0 6px;">Admin sign in</h1>
-    <div style="font-size:.78rem;color:var(--ink-dim);margin-bottom:20px;">Demo authentication — any password signs in. Wire this to real auth in production.</div>
-    <div class="field"><label>Email</label><input id="al_user" value="admin@amirphone.example"></div>
-    <div class="field"><label>Password</label><input id="al_pass" type="password" placeholder="Any value works in this demo"></div>
-    <button class="btn primary block" onclick="adminLogin()">Sign in</button>
+    <p style="font-size:.82rem;color:var(--ink-dim);margin-bottom:20px;">A secure sign-in link will be sent to the store owner's email.</p>
+    <div class="field"><label>Owner email</label><input id="al_user" type="email" autocomplete="email" value="amir.phone.35dz@gmail.com"></div>
+    <button class="btn primary block" onclick="adminLogin()">Send secure sign-in link</button>
+    <p id="authMessage" role="status" style="font-size:.8rem;margin-top:14px;"></p>
   </div>`;
 });
-function adminLogin(){
-  const pass = document.getElementById('al_pass').value;
-  if(!pass){ toast('Enter a password.', 'err'); return; }
-  state.adminAuth = true; persist();
-  nav('/admin');
+async function adminLogin(){
+  const email=(document.getElementById('al_user')?.value||'').trim().toLowerCase();
+  const msg=document.getElementById('authMessage');
+  if(!email){ if(msg)msg.textContent='Enter your email.'; return; }
+  if(email!=='amir.phone.35dz@gmail.com'){ if(msg)msg.textContent='This email is not authorized.'; return; }
+  if(!window.amirSupabase){if(msg)msg.textContent='Secure sign-in is unavailable. Refresh and try again.';return;}
+  try{const {error}=await window.amirSupabase.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+location.pathname+'#/admin'}});if(error)throw error;if(msg)msg.textContent='Check your inbox and open the sign-in link on this device.';}
+  catch(e){if(msg)msg.textContent=e.message||'Could not send sign-in link.';}
 }
-function adminLogout(){ state.adminAuth = false; persist(); nav('/home'); }
+async function adminLogout(){if(window.amirSupabase)await window.amirSupabase.auth.signOut();IS_OWNER=false;nav('/home');}
 
 function adminShell(active, bodyHtml){
   const links = [['/admin','Overview'],['/admin/products','Products'],['/admin/categories','Categories'],['/admin/orders','Orders'],['/admin/coupons','Coupons'],['/admin/settings','Settings']];
