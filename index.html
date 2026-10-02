@@ -1418,21 +1418,17 @@ function checkoutStep1(){
       <div class="field"><label>Country</label><input id="cf_country" value="${c.country||''}"></div>
       <div class="field"><label>State / Province</label><input id="cf_state" value="${c.state||''}"></div>
     </div>
-    <div class="row2">
-      <div class="field"><label>City</label><input id="cf_city" value="${c.city||''}"></div>
-      <div class="field"><label>Address</label><input id="cf_addr" value="${c.address||''}"></div>
-    </div>
     <div id="cf_err" style="color:var(--bad);font-size:.82rem;margin-bottom:10px;"></div>
     <button class="btn primary block" onclick="ckNext1()">Continue to shipping</button>`;
 }
 function ckNext1(){
   const g = id=>document.getElementById(id).value.trim();
-  const name=g('cf_name'), phone=g('cf_phone'), email=g('cf_email'), country=g('cf_country'), st=g('cf_state'), city=g('cf_city'), addr=g('cf_addr');
+  const name=g('cf_name'), phone=g('cf_phone'), email=g('cf_email'), country=g('cf_country'), st=g('cf_state');
   const err = document.getElementById('cf_err');
-  if(!name||!phone||!email||!country||!city||!addr){ err.textContent='Please fill in all required fields.'; return; }
+  if(!name||!phone||!email||!country){ err.textContent='Please fill in all required fields.'; return; }
   if(!/^\S+@\S+\.\S+$/.test(email)){ err.textContent='Enter a valid email address.'; return; }
   if(phone.replace(/\D/g,'').length<7){ err.textContent='Enter a valid phone number.'; return; }
-  checkoutState.customer = {name:clean(name),phone:clean(phone),email:clean(email),country:clean(country),state:clean(st),city:clean(city),address:clean(addr)};
+  checkoutState.customer = {name:clean(name),phone:clean(phone),email:clean(email),country:clean(country),state:clean(st)};
   checkoutState.step=2; render();
 }
 function checkoutStep2(shipCost,sub){
@@ -1470,7 +1466,7 @@ function checkoutStep4(sub,shipCost,disc,total,lines){
     <h3 style="font-size:.95rem;margin:0 0 8px;">Items</h3>
     ${lines.map(l=>`<div style="display:flex;justify-content:space-between;font-size:.85rem;padding:6px 0;border-bottom:1px dashed var(--line);"><span>${l.p.name} × ${l.qty}</span><span>${money(l.total)}</span></div>`).join('')}
     <h3 style="font-size:.95rem;margin:18px 0 8px;">Shipping to</h3>
-    <div style="font-size:.85rem;color:var(--ink-dim);line-height:1.6;">${c.name}<br>${c.address}, ${c.city}, ${c.state?c.state+', ':''}${c.country}<br>${c.phone} · ${c.email}</div>
+    <div style="font-size:.85rem;color:var(--ink-dim);line-height:1.6;">${c.name}<br>${c.state?c.state+', ':''}${c.country}<br>${c.phone} · ${c.email}</div>
     <h3 style="font-size:.95rem;margin:18px 0 8px;">Payment</h3>
     <div style="font-size:.85rem;color:var(--ink-dim);">${checkoutState.payment.method==='cod'?'Cash on Delivery':'Online Payment'}</div>
     <div style="display:flex;gap:8px;margin-top:16px;"><input id="ck_coupon" class="qin" style="flex:1;width:auto;" placeholder="Coupon code" value="${checkoutState.couponCode||''}"><button class="btn ghost sm" onclick="applyCouponFromCheckout()">Apply</button></div>
@@ -1515,8 +1511,8 @@ async function confirmOrder(){
     const {data:savedOrder,error:orderError}=await window.amirSupabase.rpc('place_store_order',{
       p_customer_name:customer.name||'',
       p_phone:customer.phone||'',
-      p_address:customer.address||'',
-      p_wilaya:customer.city||customer.wilaya||'',
+      p_address:'',
+      p_wilaya:customer.state||customer.wilaya||'',
       p_total:total,
       p_items:lines.map(l=>({product_name:l.p.name,quantity:l.qty,unit_price:l.unit}))
     });
@@ -1551,7 +1547,7 @@ route('/order/:id', (params)=>{
     <div style="color:var(--ink-dim);margin-bottom:20px;">Order <span class="mono">#${o.id}</span> · ${money(o.total)}</div>
     <div style="text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:20px;">
       <div style="font-size:.85rem;color:var(--ink-dim);margin-bottom:6px;">Delivery to</div>
-      <div style="font-size:.88rem;margin-bottom:14px;">${o.customer.name} · ${o.customer.address}, ${o.customer.city}</div>
+      <div style="font-size:.88rem;margin-bottom:14px;">${o.customer.name} · ${o.customer.state?o.customer.state+', ':''}${o.customer.country||''}</div>
       <div style="font-size:.85rem;color:var(--ink-dim);margin-bottom:6px;">Shipping method</div>
       <div style="font-size:.88rem;margin-bottom:14px;">${o.shipping.name} · ${o.shipping.eta}</div>
       <div style="font-size:.85rem;color:var(--ink-dim);margin-bottom:6px;">Status</div>
