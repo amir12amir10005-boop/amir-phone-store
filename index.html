@@ -1576,8 +1576,10 @@ route('/login', ()=>{
  if(CUSTOMER_USER) return '<div class="container"><div class="empty">أنت مسجل الدخول بالفعل. <button class="btn primary" onclick="nav(\'/home\')">الانتقال إلى المتجر</button></div></div>';
  return '<div class="container" style="max-width:420px;padding-top:50px;">'+
  '<h1>حساب العميل</h1><p>استخدم بريدك الإلكتروني وكلمة المرور للدخول أو إنشاء حساب جديد.</p>'+
+ (customerAuthMode==='signup'?'<div class="field"><label>اسم المستخدم</label><input id="customer_username" type="text" autocomplete="username" maxlength="40" placeholder="اكتب اسم المستخدم"></div>':'')+
  '<div class="field"><label>البريد الإلكتروني</label><input id="customer_email" type="email" autocomplete="email" placeholder="name@example.com"></div>'+
- '<div class="field"><label>كلمة المرور</label><input id="customer_password" type="password" autocomplete="current-password" placeholder="كلمة المرور (6 أحرف على الأقل)"></div>'+
+ '<div class="field"><label>كلمة المرور</label><input id="customer_password" type="password" autocomplete="'+(customerAuthMode==='login'?'current-password':'new-password')+'" placeholder="كلمة المرور (6 أحرف على الأقل)"></div>'+
+ (customerAuthMode==='signup'?'<div class="field"><label>تأكيد كلمة المرور</label><input id="customer_password_confirm" type="password" autocomplete="new-password" placeholder="أعد كتابة كلمة المرور"></div>':'')+
  '<button class="btn primary block" onclick="customerAuthSubmit()">'+(customerAuthMode==='login'?'تسجيل الدخول':'إنشاء حساب')+'</button>'+
  '<button class="btn ghost block" style="margin-top:10px" onclick="toggleCustomerAuth()">'+(customerAuthMode==='login'?'ليس لديك حساب؟ إنشاء حساب':'لديك حساب بالفعل؟ تسجيل الدخول')+'</button>'+
  '<p id="customerAuthMessage" role="status" style="margin-top:14px"></p></div>';
@@ -1586,13 +1588,17 @@ function toggleCustomerAuth(){customerAuthMode=customerAuthMode==='login'?'signu
 async function customerAuthSubmit(){
  const email=(document.getElementById('customer_email')?.value||'').trim().toLowerCase();
  const password=document.getElementById('customer_password')?.value||'';
+ const username=(document.getElementById('customer_username')?.value||'').trim();
+ const passwordConfirm=document.getElementById('customer_password_confirm')?.value||'';
  const msg=document.getElementById('customerAuthMessage');
  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){if(msg)msg.textContent='أدخل بريداً إلكترونياً صحيحاً.';return;}
  if(password.length<6){if(msg)msg.textContent='يجب أن تتكون كلمة المرور من 6 أحرف على الأقل.';return;}
+ if(customerAuthMode==='signup'&&!username){if(msg)msg.textContent='اكتب اسم المستخدم.';return;}
+ if(customerAuthMode==='signup'&&password!==passwordConfirm){if(msg)msg.textContent='كلمتا المرور غير متطابقتين.';return;}
  if(!window.amirSupabase){if(msg)msg.textContent='خدمة تسجيل الدخول غير متاحة حالياً.';return;}
  try{
   if(customerAuthMode==='signup'){
-   const {data,error}=await window.amirSupabase.auth.signUp({email,password,options:{emailRedirectTo:'https://amir12amir10005-boop.github.io/amir-phone-store/?auth_callback=1'}}); if(error)throw error;
+   const {data,error}=await window.amirSupabase.auth.signUp({email,password,options:{data:{username},emailRedirectTo:'https://amir12amir10005-boop.github.io/amir-phone-store/?auth_callback=1'}}); if(error)throw error;
    if(data.session){CUSTOMER_USER=data.user;nav('/home');}
    else if(msg)msg.textContent='تم إنشاء الحساب. إذا كان تأكيد البريد مفعّلاً في إعدادات المتجر، فستحتاج إلى تأكيده قبل تسجيل الدخول.';
   }else{
