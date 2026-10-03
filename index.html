@@ -1402,6 +1402,7 @@ function couponDiscount(sub){
 }
 route('/checkout', ()=>{
   setTitle('Checkout');
+  if(!CUSTOMER_USER) return `<div class="container"><div class="empty">يجب تسجيل الدخول أولاً لإتمام الشراء وحفظ الطلبات في حسابك.<div><button class="btn primary" onclick="nav('/login')">تسجيل الدخول أو إنشاء حساب</button></div></div></div>`;
   const lines = cartLines();
   if(!lines.length) return `<div class="container"><div class="empty">Your cart is empty.<div><button class="btn primary" onclick="nav('/shop')">Browse products</button></div></div></div>`;
   const sub = cartSubtotal();
@@ -1592,7 +1593,7 @@ async function customerAuthSubmit(){
   if(customerAuthMode==='signup'){
    const {data,error}=await window.amirSupabase.auth.signUp({email,password,options:{emailRedirectTo:'https://amir12amir10005-boop.github.io/amir-phone-store/?auth_callback=1'}}); if(error)throw error;
    if(data.session){CUSTOMER_USER=data.user;nav('/home');}
-   else if(msg)msg.textContent='تم إنشاء الحساب. تحقق من بريدك الإلكتروني لتأكيده ثم سجّل الدخول.';
+   else if(msg)msg.textContent='تم إنشاء الحساب. إذا كان تأكيد البريد مفعّلاً في إعدادات المتجر، فستحتاج إلى تأكيده قبل تسجيل الدخول.';
   }else{
    const {data,error}=await window.amirSupabase.auth.signInWithPassword({email,password});if(error)throw error;
    CUSTOMER_USER=data.user;nav('/home');
