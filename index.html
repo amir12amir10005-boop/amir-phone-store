@@ -642,7 +642,7 @@ function stockLabel(p){
    ROUTER
    ========================================================================= */
 function parseHash(){
-  const raw = location.hash.slice(1) || '/home';
+  const raw = location.hash.slice(1) || '/login';
   const [path, qs] = raw.split('?');
   return { path, params: new URLSearchParams(qs||'') };
 }
