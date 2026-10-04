@@ -2506,10 +2506,18 @@ document.getElementById('menuBtn').addEventListener('click', ()=>{
 });
 
 applyLang();
+// Render the local catalog immediately so Instagram's in-app browser never
+// leaves the product area blank while the cloud request is pending.
+try { render(); } catch(e) { console.error('Initial store render failed:',e); }
 (async function bootStore(){
   try {
     if(window.amirSupabase){
-      const {data,error}=await window.amirSupabase.from('store_state').select('payload').eq('id',1).maybeSingle();
+      const request = window.amirSupabase.from('store_state').select('payload').eq('id',1).maybeSingle();
+      const result = await Promise.race([
+        request,
+        new Promise((_,reject)=>setTimeout(()=>reject(new Error('Catalog request timed out')),7000))
+      ]);
+      const {data,error}=result;
       if(error) throw error;
       const p=data&&data.payload;
       if(p&&Array.isArray(p.products)&&p.products.length){
@@ -2520,8 +2528,8 @@ applyLang();
         saveDB(state);
       }
     }
-  } catch(e) { console.warn('Cloud catalog unavailable; showing local catalog instead:',e); }
-  try { render(); } catch(e) { console.error('Store render failed:',e); document.getElementById('app').innerHTML='<div class="container"><div class="empty">تعذّر عرض المنتجات. أعد تحميل الصفحة أو حاول لاحقًا.</div></div>'; }
+  } catch(e) { console.warn('Cloud catalog unavailable; keeping the immediately rendered catalog:',e); }
+  try { render(); } catch(e) { console.error('Store refresh failed:',e); }
 })();
 if(!STORAGE_OK) setTimeout(()=>toast('Private mode: changes will not be kept after closing the page.','err'),3000);
 </script>
