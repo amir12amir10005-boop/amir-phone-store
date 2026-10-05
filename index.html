@@ -1480,7 +1480,7 @@ function ckNext1(){
   const err = document.getElementById('cf_err');
   if(!name||!phone||!email||!wilaya){ err.textContent='Please fill in all required fields.'; return; }
   if(!/^\S+@\S+\.\S+$/.test(email)){ err.textContent='Enter a valid email address.'; return; }
-  if(phone.replace(/\\D/g,'').length<7){ err.textContent='Enter a valid phone number.'; return; }
+  if(phone.replace(/\D/g,'').length<7){ err.textContent='Enter a valid phone number.'; return; }
   checkoutState.customer = {name:clean(name),phone:clean(phone),email:clean(email),wilaya:clean(wilaya)};
   checkoutState.step=2; render();
 }
@@ -1519,7 +1519,7 @@ function checkoutStep4(sub,shipCost,disc,total,lines){
     <h3 style="font-size:.95rem;margin:0 0 8px;">Items</h3>
     ${lines.map(l=>`<div style="display:flex;justify-content:space-between;font-size:.85rem;padding:6px 0;border-bottom:1px dashed var(--line);"><span>${l.p.name} × ${l.qty}</span><span>${money(l.total)}</span></div>`).join('')}
     <h3 style="font-size:.95rem;margin:18px 0 8px;">Shipping to</h3>
-    <div style="font-size:.85rem;color:var(--ink-dim);line-height:1.6;">${c.name}<br>${c.state?c.state+', ':''}${c.country}<br>${c.phone} · ${c.email}</div>
+    <div style="font-size:.85rem;color:var(--ink-dim);line-height:1.6;">${c.name}<br>${c.wilaya||'—'}<br>${c.phone} · ${c.email}</div>
     <h3 style="font-size:.95rem;margin:18px 0 8px;">Payment</h3>
     <div style="font-size:.85rem;color:var(--ink-dim);">${checkoutState.payment.method==='cod'?'Cash on Delivery':'Online Payment'}</div>
     <div style="display:flex;gap:8px;margin-top:16px;"><input id="ck_coupon" class="qin" style="flex:1;width:auto;" placeholder="Coupon code" value="${checkoutState.couponCode||''}"><button class="btn ghost sm" onclick="applyCouponFromCheckout()">Apply</button></div>
@@ -1689,27 +1689,31 @@ route('/admin/login', ()=>{
   setTitle('Admin login');
   return `<div class="container" style="max-width:380px;padding-top:60px;">
     <h1 style="font-size:1.3rem;margin:0 0 6px;">Admin sign in</h1>
-    <p style="font-size:.82rem;color:var(--ink-dim);margin-bottom:20px;">A secure sign-in link will be sent to the store owner's email.</p>
-    <div class="field"><label>Owner email</label><input id="al_user" type="email" autocomplete="email" placeholder="أدخل بريد صاحب المتجر" value="${(localStorage.getItem("amir_owner_email")||"").replace(/&/g,"&amp;").replace(/"/g,"&quot;")}"></div>
-    <button class="btn primary block" onclick="adminLogin()">Send secure sign-in link</button>
+    <p style="font-size:.82rem;color:var(--ink-dim);margin-bottom:20px;">سجّل الدخول بحساب المشرف الخاص بك. يجب أن يكون البريد مسجلاً في قائمة مالك المتجر.</p>
+    <div class="field"><label>Owner email</label><input id="al_user" type="email" autocomplete="username" placeholder="أدخل بريد صاحب المتجر" value="${(localStorage.getItem("amir_owner_email")||"").replace(/&/g,"&amp;").replace(/"/g,"&quot;")}"></div>
+    <div class="field"><label>Password</label><input id="al_password" type="password" autocomplete="current-password" placeholder="كلمة مرور المشرف"></div>
+    <button class="btn primary block" onclick="adminLogin()">Sign in</button>
     <p id="authMessage" role="status" style="font-size:.8rem;margin-top:14px;"></p>
   </div>`;
 });
 async function adminLogin(){
   const email=(document.getElementById('al_user')?.value||'').trim().toLowerCase();
+  const password=document.getElementById('al_password')?.value||'';
   const msg=document.getElementById('authMessage');
-  if(!email){ if(msg)msg.textContent='Enter your email.'; return; }
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ if(msg)msg.textContent='أدخل بريداً إلكترونياً صحيحاً.'; return; }
+  if(!email){if(msg)msg.textContent='Enter your email.';return;}
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){if(msg)msg.textContent='أدخل بريداً إلكترونياً صحيحاً.';return;}
+  if(password.length<6){if(msg)msg.textContent='أدخل كلمة مرور صحيحة.';return;}
   if(!window.amirSupabase){if(msg)msg.textContent='Secure sign-in is unavailable. Refresh and try again.';return;}
   try{
     const {data:owner,error:ownerError}=await window.amirSupabase.from('store_admins').select('email').ilike('email',email).maybeSingle();
     if(ownerError)throw ownerError;
     if(!owner){if(msg)msg.textContent='هذا البريد غير مخوّل كصاحب للمتجر.';return;}
-    localStorage.setItem('amir_owner_email',email);
-    const {error}=await window.amirSupabase.auth.signInWithOtp({email,options:{emailRedirectTo:'https://store35.github.io/amir-phone-store/?auth_callback=1',shouldCreateUser:false}});
+    const {data,error}=await window.amirSupabase.auth.signInWithPassword({email,password});
     if(error)throw error;
-    if(msg)msg.textContent='Check your inbox and open the sign-in link on this device.';
-  }catch(e){if(msg)msg.textContent=e.message||'Could not send sign-in link.';}
+    CUSTOMER_USER=data.user; IS_OWNER=true; OWNER_READY=true;
+    localStorage.setItem('amir_owner_email',email);
+    nav('/admin');
+  }catch(e){if(msg)msg.textContent=e.message||'تعذر تسجيل الدخول.';}
 }
 async function adminLogout(){if(window.amirSupabase)await window.amirSupabase.auth.signOut();IS_OWNER=false;nav('/home');}
 
