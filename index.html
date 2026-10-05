@@ -588,8 +588,9 @@ async function verifyOwnerSession(session){
         const p=(location.hash.slice(1)||'/home').split('?')[0];
         const callback=new URLSearchParams(location.search).has('auth_callback');
         const recovery=new URLSearchParams(location.search).has('auth_recovery');
+        const recoveryHash=location.hash.includes('type=recovery') || location.hash.includes('access_token=');
         const isRecoveryEvent=event==='PASSWORD_RECOVERY';
-        if(recovery || isRecoveryEvent){
+        if(recovery || recoveryHash || isRecoveryEvent){
           nav('/admin/reset-password');
         }else if(IS_OWNER && (p==='/admin/login'||callback)){
           history.replaceState(null,'',location.pathname);
@@ -604,7 +605,8 @@ async function verifyOwnerSession(session){
     });
     const callback=new URLSearchParams(location.search).has('auth_callback');
     const recovery=new URLSearchParams(location.search).has('auth_recovery');
-    if(recovery){nav('/admin/reset-password');}
+    const recoveryHash=location.hash.includes('type=recovery') || location.hash.includes('access_token=');
+    if(recovery || recoveryHash){nav('/admin/reset-password');}
     else if(IS_OWNER && callback){history.replaceState(null,'',location.pathname);nav('/admin');}
     else if(CUSTOMER_USER && callback){history.replaceState(null,'',location.pathname);nav('/home');}
   }catch(e){
@@ -1772,7 +1774,7 @@ async function sendAdminReset(){
   if(!window.amirSupabase){if(msg)msg.textContent='خدمة الاستعادة غير متاحة حالياً.';return;}
   try{
     localStorage.setItem('amir_owner_email',email);
-    const redirectTo=location.origin+location.pathname+'?auth_recovery=1';
+    const redirectTo=location.origin+location.pathname;
     const {error}=await window.amirSupabase.auth.resetPasswordForEmail(email,{redirectTo});
     if(error)throw error;
     if(msg)msg.textContent='تم إرسال رابط إعادة تعيين كلمة المرور. افحص بريدك الإلكتروني.';
