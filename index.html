@@ -577,12 +577,14 @@ async function verifyOwnerSession(session){
     CUSTOMER_READY=true;
     IS_OWNER=await verifyOwnerSession(session);
     OWNER_READY=true;
+    startOrderRealtime();
     window.amirSupabase.auth.onAuthStateChange((event,s)=>{
       setTimeout(async()=>{
         CUSTOMER_USER=s?.user||null;
         CUSTOMER_READY=true;
         IS_OWNER=await verifyOwnerSession(s);
         OWNER_READY=true;
+        startOrderRealtime();
         const p=(location.hash.slice(1)||'/home').split('?')[0];
         const callback=new URLSearchParams(location.search).has('auth_callback');
         if(IS_OWNER && (p==='/admin/login'||callback)){
@@ -1985,11 +1987,11 @@ async function loadAdminOrders(){
   const STATUSES=['pending','confirmed','preparing','shipped','delivered','cancelled'];
   const labels={pending:'قيد الانتظار',confirmed:'مؤكد',preparing:'قيد التحضير',shipped:'تم الشحن',delivered:'تم التسليم',cancelled:'ملغي'};
   try{
-    const {data:orders,error}=await window.amirSupabase.from('orders').select('id,customer_name,phone,address,wilaya,total,status,created_at').order('created_at',{ascending:false});
+    const {data:orders,error}=await window.amirSupabase.from('orders').select('id,customer_name,phone,wilaya,total,status,created_at').order('created_at',{ascending:false});
     if(error)throw error;
     if(!orders||!orders.length){host.innerHTML='<div style="padding:18px 0;">لا توجد طلبات حتى الآن.<br><button class="btn ghost sm" style="margin-top:12px" onclick="loadAdminOrders()">تحديث القائمة</button></div>';return;}
     const ids=orders.map(o=>o.id);
-    const {data:items,itemError}=await window.amirSupabase.from('order_items').select('order_id,product_name,quantity,unit_price').in('order_id',ids);
+    const {data:items,error:itemError}=await window.amirSupabase.from('order_items').select('order_id,product_name,quantity,unit_price').in('order_id',ids);
     if(itemError)console.warn('Could not load order line items:',itemError.message);
     const byOrder={};(items||[]).forEach(it=>{(byOrder[it.order_id]||(byOrder[it.order_id]=[])).push(it);});
     host.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;"><b>عدد الطلبات: '+orders.length+'</b><button class="btn ghost sm" onclick="loadAdminOrders()">تحديث</button></div><div style="display:grid;gap:12px;">'+orders.map(o=>{
@@ -2001,7 +2003,7 @@ async function loadAdminOrders(){
         +'<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;"><strong>طلب #'+o.id.slice(0,8).toUpperCase()+'</strong><span class="pill '+status+'">'+(labels[status]||status)+'</span></div>'
         +'<div><b>الزبون:</b> '+clean(o.customer_name||'—')+'</div>'
         +'<div><b>الهاتف:</b> <a href="tel:'+clean(o.phone||'')+'">'+clean(o.phone||'—')+'</a></div>'
-        +'<div><b>العنوان:</b> '+clean([o.address,o.wilaya].filter(Boolean).join('، '))+'</div>'
+        +'<div><b>الولاية:</b> '+clean(o.wilaya||'—')+'</div>'
         +itemHtml
         +'<div><b>المجموع:</b> '+money(Number(o.total)||0)+'</div>'
         +'<div style="font-size:.78rem;color:var(--ink-dim);">'+new Date(o.created_at).toLocaleString('ar-DZ')+'</div>'
@@ -2095,6 +2097,7 @@ function saveSettings(){
    AFTER-RENDER HOOKS (mount 3D viewers, wire per-page listeners)
    ========================================================================= */
 function afterRender(path){
+  if(path.startsWith('/order/')){ const id=path.split('/')[2]; setTimeout(()=>openOrderAfterRefresh(id),0); }
   document.querySelectorAll('[data-viewer]:not([data-lazy])').forEach(el=>{
     mountViewer(el, el.dataset.viewer, +el.dataset.hue, {pid: el.dataset.pid});
   });
@@ -2545,6 +2548,93 @@ document.getElementById('menuBtn').addEventListener('click', ()=>{
   document.getElementById('sheet').classList.add('side-menu');
   openSheet('Menu',html,'',()=>{});
 });
+
+/* =========================================================================
+   ORDER RELIABILITY PATCH — live status + refresh-safe order pages
+   ========================================================================= */
+let customerOrderChannel = null;
+let adminOrderChannel = null;
+
+async function loadSpecificCustomerOrder(orderId){
+  if(!window.amirSupabase || !CUSTOMER_USER || !orderId) return false;
+  try{
+    const {data:o,error}=await window.amirSupabase
+      .from('orders')
+      .select('id,total,status,created_at,wilaya')
+      .eq('id',orderId)
+      .eq('user_id',CUSTOMER_USER.id)
+      .maybeSingle();
+    if(error) throw error;
+    if(!o) return false;
+    const {data:items,error:itemError}=await window.amirSupabase
+      .from('order_items')
+      .select('order_id,product_name,quantity,unit_price')
+      .eq('order_id',orderId);
+    if(itemError) throw itemError;
+    const order={
+      id:o.id,total:Number(o.total)||0,status:String(o.status||'pending'),
+      createdAt:o.created_at?new Date(o.created_at).getTime():Date.now(),
+      items:(items||[]).map(it=>({name:it.product_name,qty:Number(it.quantity)||1,price:Number(it.unit_price)||0})),
+      customer:{name:'',wilaya:o.wilaya||''},
+      shipping:{name:'Standard',eta:'3–5 business days'},
+      payment:{method:'cod',status:'pending'}
+    };
+    state.orders=state.orders.filter(x=>x.id!==orderId);
+    state.orders.unshift(order);
+    return true;
+  }catch(e){
+    console.error('Specific order refresh failed:',e);
+    return false;
+  }
+}
+
+function stopOrderRealtime(){
+  try{
+    if(customerOrderChannel && window.amirSupabase) window.amirSupabase.removeChannel(customerOrderChannel);
+    if(adminOrderChannel && window.amirSupabase) window.amirSupabase.removeChannel(adminOrderChannel);
+  }catch(e){}
+  customerOrderChannel=null;
+  adminOrderChannel=null;
+}
+
+function startOrderRealtime(){
+  if(!window.amirSupabase) return;
+  stopOrderRealtime();
+
+  if(CUSTOMER_USER){
+    customerOrderChannel=window.amirSupabase
+      .channel('amir-customer-orders-'+CUSTOMER_USER.id)
+      .on('postgres_changes',
+        {event:'UPDATE',schema:'public',table:'orders',filter:'user_id=eq.'+CUSTOMER_USER.id},
+        async payload=>{
+          const id=payload?.new?.id;
+          if(id) await loadSpecificCustomerOrder(id);
+          if(location.hash==='#/account') loadCustomerOrders();
+          else if(location.hash==='#/order/'+id) render(true);
+        })
+      .subscribe();
+  }
+
+  if(IS_OWNER){
+    adminOrderChannel=window.amirSupabase
+      .channel('amir-admin-orders')
+      .on('postgres_changes',
+        {event:'*',schema:'public',table:'orders'},
+        async ()=>{
+          if(location.hash==='#/admin/orders') await loadAdminOrders();
+        })
+      .subscribe();
+  }
+}
+
+async function openOrderAfterRefresh(orderId){
+  if(!CUSTOMER_USER) return;
+  let found=state.orders.find(x=>x.id===orderId);
+  if(!found){
+    const ok=await loadSpecificCustomerOrder(orderId);
+    if(ok && location.hash==='#/order/'+orderId) render(true);
+  }
+}
 
 applyLang();
 // Render the local catalog immediately so Instagram's in-app browser never
