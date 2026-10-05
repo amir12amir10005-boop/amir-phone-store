@@ -587,7 +587,11 @@ async function verifyOwnerSession(session){
         OWNER_READY=true;
         const p=(location.hash.slice(1)||'/home').split('?')[0];
         const callback=new URLSearchParams(location.search).has('auth_callback');
-        if(IS_OWNER && (p==='/admin/login'||callback)){
+        const recovery=new URLSearchParams(location.search).has('auth_recovery');
+        if(recovery){
+          history.replaceState(null,'',location.pathname+'?auth_recovery=1');
+          nav('/admin/reset-password');
+        }else if(IS_OWNER && (p==='/admin/login'||callback)){
           history.replaceState(null,'',location.pathname);
           nav('/admin');
         }else if(CUSTOMER_USER && callback){
@@ -599,7 +603,9 @@ async function verifyOwnerSession(session){
       },0);
     });
     const callback=new URLSearchParams(location.search).has('auth_callback');
-    if(IS_OWNER && callback){history.replaceState(null,'',location.pathname);nav('/admin');}
+    const recovery=new URLSearchParams(location.search).has('auth_recovery');
+    if(recovery){nav('/admin/reset-password');}
+    else if(IS_OWNER && callback){history.replaceState(null,'',location.pathname);nav('/admin');}
     else if(CUSTOMER_USER && callback){history.replaceState(null,'',location.pathname);nav('/home');}
   }catch(e){
     console.error('Auth initialization failed:',e);
@@ -1730,9 +1736,63 @@ route('/admin/login', ()=>{
     <div class="field"><label>Owner email</label><input id="al_user" type="email" autocomplete="username" placeholder="أدخل بريد صاحب المتجر" value="${(localStorage.getItem("amir_owner_email")||"").replace(/&/g,"&amp;").replace(/"/g,"&quot;")}"></div>
     <div class="field"><label>Password</label><input id="al_password" type="password" autocomplete="current-password" placeholder="كلمة مرور المشرف"></div>
     <button class="btn primary block" onclick="adminLogin()">Sign in</button>
+    <button class="btn ghost block" style="margin-top:10px;" onclick="nav('/admin/forgot-password')">نسيت كلمة المرور؟</button>
     <p id="authMessage" role="status" style="font-size:.8rem;margin-top:14px;"></p>
   </div>`;
 });
+route('/admin/forgot-password', ()=>{
+  setTitle('Reset admin password');
+  return `<div class="container" style="max-width:380px;padding-top:60px;">
+    <h1 style="font-size:1.3rem;margin:0 0 6px;">نسيت كلمة المرور؟</h1>
+    <p style="font-size:.82rem;color:var(--ink-dim);margin-bottom:20px;">أدخل بريد المشرف وسنرسل رابطًا لإعادة تعيين كلمة المرور.</p>
+    <div class="field"><label>Owner email</label><input id="af_email" type="email" autocomplete="email" placeholder="بريد المشرف" value="${(localStorage.getItem("amir_owner_email")||"").replace(/&/g,"&amp;").replace(/"/g,"&quot;")}"></div>
+    <button class="btn primary block" onclick="sendAdminReset()">إرسال رابط الاستعادة</button>
+    <button class="btn ghost block" style="margin-top:10px;" onclick="nav('/admin/login')">العودة لتسجيل الدخول</button>
+    <p id="resetMessage" role="status" style="font-size:.8rem;margin-top:14px;"></p>
+  </div>`;
+});
+route('/admin/reset-password', ()=>{
+  setTitle('New admin password');
+  return `<div class="container" style="max-width:380px;padding-top:60px;">
+    <h1 style="font-size:1.3rem;margin:0 0 6px;">تعيين كلمة مرور جديدة</h1>
+    <p style="font-size:.82rem;color:var(--ink-dim);margin-bottom:20px;">اختر كلمة مرور جديدة لحساب المشرف.</p>
+    <div class="field"><label>New password</label><input id="nr_password" type="password" autocomplete="new-password" placeholder="6 أحرف على الأقل"></div>
+    <div class="field"><label>Confirm password</label><input id="nr_confirm" type="password" autocomplete="new-password" placeholder="تأكيد كلمة المرور"></div>
+    <button class="btn primary block" onclick="saveAdminNewPassword()">حفظ كلمة المرور</button>
+    <p id="newPasswordMessage" role="status" style="font-size:.8rem;margin-top:14px;"></p>
+  </div>`;
+});
+async function sendAdminReset(){
+  const email=(document.getElementById('af_email')?.value||'').trim().toLowerCase();
+  const msg=document.getElementById('resetMessage');
+  if(!email){if(msg)msg.textContent='أدخل بريد المشرف.';return;}
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){if(msg)msg.textContent='أدخل بريداً إلكترونياً صحيحاً.';return;}
+  if(!window.amirSupabase){if(msg)msg.textContent='خدمة الاستعادة غير متاحة حالياً.';return;}
+  try{
+    const {data:owner,error:ownerError}=await window.amirSupabase.from('store_admins').select('email').ilike('email',email).maybeSingle();
+    if(ownerError)throw ownerError;
+    if(!owner){if(msg)msg.textContent='هذا البريد غير مخوّل كصاحب للمتجر.';return;}
+    localStorage.setItem('amir_owner_email',email);
+    const redirectTo=location.origin+location.pathname+'?auth_recovery=1';
+    const {error}=await window.amirSupabase.auth.resetPasswordForEmail(email,{redirectTo});
+    if(error)throw error;
+    if(msg)msg.textContent='تم إرسال رابط إعادة تعيين كلمة المرور إلى بريد المشرف.';
+  }catch(e){if(msg)msg.textContent=e.message||'تعذر إرسال رابط الاستعادة.';}
+}
+async function saveAdminNewPassword(){
+  const p=document.getElementById('nr_password')?.value||'';
+  const c=document.getElementById('nr_confirm')?.value||'';
+  const msg=document.getElementById('newPasswordMessage');
+  if(p.length<6){if(msg)msg.textContent='يجب أن تتكون كلمة المرور من 6 أحرف على الأقل.';return;}
+  if(p!==c){if(msg)msg.textContent='كلمتا المرور غير متطابقتين.';return;}
+  if(!window.amirSupabase){if(msg)msg.textContent='خدمة الاستعادة غير متاحة حالياً.';return;}
+  try{
+    const {error}=await window.amirSupabase.auth.updateUser({password:p});
+    if(error)throw error;
+    if(msg)msg.textContent='تم تغيير كلمة المرور بنجاح. يمكنك الآن تسجيل الدخول.';
+    setTimeout(()=>nav('/admin/login'),900);
+  }catch(e){if(msg)msg.textContent=e.message||'تعذر تغيير كلمة المرور.';}
+}
 async function adminLogin(){
   const email=(document.getElementById('al_user')?.value||'').trim().toLowerCase();
   const password=document.getElementById('al_password')?.value||'';
