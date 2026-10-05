@@ -1656,7 +1656,7 @@ async function syncCustomerNav(){
  ['ownerLoginMobile','ownerLoginDesktop'].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.toggle('hide',signedIn);});
  ['customerLogoutTop','customerLogoutDesktop'].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.toggle('hide',!signedIn);});
 }
-async async function customerLogout(){stopOrdersRealtime();if(window.amirSupabase)await window.amirSupabase.auth.signOut();CUSTOMER_USER=null;syncCustomerNav();nav('/login');}
+async function customerLogout(){stopOrdersRealtime();if(window.amirSupabase)await window.amirSupabase.auth.signOut();CUSTOMER_USER=null;syncCustomerNav();nav('/login');}
 
 let customerOrdersRefreshTimer=null;
 async function loadCustomerOrders(){
