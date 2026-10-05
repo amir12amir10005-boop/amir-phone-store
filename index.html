@@ -2420,14 +2420,21 @@ function applyLang(){
   document.getElementById('langBtn').textContent = ar ? 'EN' : 'ع';
   if(ar) translateNode(document.body); else restoreEnglish();
 }
-function setLang(l){ state.lang = l; persist(); 
+function setLang(l){
+  state.lang = l;
+  persist();
+  applyLang();
+  render(true);
+  if(document.getElementById('cartDrawer').classList.contains('open')) renderCartDrawer();
+}
+
 // Robust password-recovery URL handling for GitHub Pages/hash routing.
 (function installRecoveryFallback(){
   const recover=()=>{
     try{
       const h=location.hash||'';
       const q=location.search||'';
-      if(h.includes('type=recovery')||h.includes('access_token=')||q.includes('type=recovery')||q.includes('access_token=')){
+      if(h.includes('type=recovery')||h.includes('access_token=')||q.includes('type=recovery')||q.includes('access_token=')||q.includes('auth_recovery=')){
         setTimeout(()=>nav('/admin/reset-password'),0);
       }
     }catch(e){console.warn('Recovery routing error',e);}
@@ -2437,7 +2444,10 @@ function setLang(l){ state.lang = l; persist();
   recover();
 })();
 
-applyLang(); render(true); if(document.getElementById('cartDrawer').classList.contains('open')) renderCartDrawer(); }
+applyLang();
+render(true);
+if(document.getElementById('cartDrawer').classList.contains('open')) renderCartDrawer();
+
 document.getElementById('langBtn').addEventListener('click', ()=> setLang(state.lang==='ar' ? 'en' : 'ar'));
 
 function pname(p){ return (state.lang==='ar' && p.nameAr) ? p.nameAr : p.name; }
