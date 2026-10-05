@@ -684,7 +684,7 @@ function stockLabel(p){
    ROUTER
    ========================================================================= */
 function parseHash(){
-  const raw = location.hash.slice(1) || '/login';
+  const raw = location.hash.slice(1) || '/home';
   const [path, qs] = raw.split('?');
   return { path, params: new URLSearchParams(qs||'') };
 }
@@ -715,7 +715,8 @@ function render(keepScroll){
   const {path, params:qp} = parseHash();
   unmountViewer();
   if(keepScroll!==true) closeAllOverlays();
-  if(!path.startsWith('/admin') && path!=='/login'){
+  const customerProtected = path==='/checkout' || path==='/account' || path.startsWith('/order/');
+  if(customerProtected){
     if(!CUSTOMER_READY){ document.getElementById('app').innerHTML='<div class="container"><div class="empty">Checking sign-in…</div></div>'; return; }
     if(!CUSTOMER_USER){ document.body.classList.remove('admin-mode'); nav('/login'); return; }
   }
