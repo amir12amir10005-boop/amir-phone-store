@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>window.amirSupabase=window.supabase.createClient('https://babdksoiscxgeajsuvec.supabase.co','sb_publishable_w2oVXCZTmbZhqxKM9EnyWg_lcsRneSJ');</script>
+<script>window.amirSupabase=(window.supabase&&typeof window.supabase.createClient==='function')?window.supabase.createClient('https://babdksoiscxgeajsuvec.supabase.co','sb_publishable_w2oVXCZTmbZhqxKM9EnyWg_lcsRneSJ'):null;</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>AMIR PHONE</title>
@@ -581,7 +581,9 @@ async function verifyOwnerSession(session){
       setTimeout(async()=>{
         CUSTOMER_USER=s?.user||null;
         CUSTOMER_READY=true;
+        stopOrdersRealtime();
         IS_OWNER=await verifyOwnerSession(s);
+        if(CUSTOMER_USER) startOrdersRealtime();
         OWNER_READY=true;
         const p=(location.hash.slice(1)||'/home').split('?')[0];
         const callback=new URLSearchParams(location.search).has('auth_callback');
@@ -650,8 +652,9 @@ const waNumber = ()=> String((state.settings&&state.settings.whatsapp)||'2136678
 function waLink(o){
   const ar = state.lang==='ar';
   const lines = o.items.map(i=>'• '+i.name+' ×'+i.qty+' — '+money(i.price*i.qty)).join('\n');
+  const wilaya = o.customer.wilaya || o.customer.state || '';
   const txt = (ar?'طلب جديد ':'New order ')+'#'+o.id+'\n'+lines+'\n'+(ar?'المجموع: ':'Total: ')+money(o.total)+'\n'
-    +(ar?'الاسم: ':'Name: ')+o.customer.name+'\n'+(ar?'الهاتف: ':'Phone: ')+(o.customer.phone||'')+'\n'+(ar?'العنوان: ':'Address: ')+(o.customer.address||'')+', '+(o.customer.city||'');
+    +(ar?'الاسم: ':'Name: ')+o.customer.name+'\n'+(ar?'الهاتف: ':'Phone: ')+(o.customer.phone||'')+'\n'+(ar?'الولاية: ':'Wilaya: ')+wilaya;
   return 'https://wa.me/'+waNumber()+'?text='+encodeURIComponent(txt);
 }
 
@@ -1574,6 +1577,7 @@ async function confirmOrder(){
     if(!placed?.order_id) throw new Error('لم تُرجع قاعدة البيانات رقم الطلب.');
     localOrder.id=placed.order_id;
     localOrder.createdAt=placed.created_at?new Date(placed.created_at).getTime():Date.now();
+    localOrder.status=String(placed.status||'pending');
   }catch(e){
     console.error('Order submission failed:',e);
     toast(e.message||'لم نتمكن من تسجيل الطلب. حاول مرة أخرى.','err');
@@ -1652,7 +1656,7 @@ async function syncCustomerNav(){
  ['ownerLoginMobile','ownerLoginDesktop'].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.toggle('hide',signedIn);});
  ['customerLogoutTop','customerLogoutDesktop'].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.toggle('hide',!signedIn);});
 }
-async function customerLogout(){if(window.amirSupabase)await window.amirSupabase.auth.signOut();CUSTOMER_USER=null;syncCustomerNav();nav('/login');}
+async async function customerLogout(){stopOrdersRealtime();if(window.amirSupabase)await window.amirSupabase.auth.signOut();CUSTOMER_USER=null;syncCustomerNav();nav('/login');}
 
 let customerOrdersRefreshTimer=null;
 async function loadCustomerOrders(){
@@ -1672,11 +1676,44 @@ function customerOrdersHtml(orders){
  const labels={pending:'قيد الانتظار',confirmed:'مؤكد',preparing:'قيد التحضير',shipped:'تم الشحن',delivered:'تم التسليم',cancelled:'ملغي'};
  return orders.length?orders.map(o=>'<div style="display:flex;justify-content:space-between;align-items:center;padding:14px;border:1px solid var(--line);border-radius:14px;margin-bottom:10px;cursor:pointer;" onclick="nav(\'/order/'+o.id+'\')"><div><div class="mono" style="font-size:.85rem;">#'+o.id.slice(0,8).toUpperCase()+'</div><div style="font-size:.75rem;color:var(--ink-dim);">'+new Date(o.createdAt).toLocaleDateString('ar-DZ')+' · '+o.items.length+' منتج</div></div><div style="text-align:right;"><div style="font-weight:500;">'+money(o.total)+'</div><span class="pill '+o.status.toLowerCase()+'">'+(labels[o.status.toLowerCase()]||o.status)+'</span></div></div>').join(''):'<div class="empty">لا توجد طلبات بعد.<div><button class="btn primary" onclick="nav(\'/shop\')">ابدأ التسوق</button></div></div>';
 }
+let ordersRealtimeChannel=null;
+let ordersRealtimeOwner=false;
+function stopOrdersRealtime(){
+  if(ordersRealtimeChannel && window.amirSupabase){
+    try{ window.amirSupabase.removeChannel(ordersRealtimeChannel); }catch(e){}
+  }
+  ordersRealtimeChannel=null;
+  ordersRealtimeOwner=false;
+}
+function startOrdersRealtime(){
+  if(!window.amirSupabase || !CUSTOMER_USER || ordersRealtimeChannel) return;
+  const userId=CUSTOMER_USER.id;
+  ordersRealtimeChannel=window.amirSupabase.channel('amir-orders-realtime')
+    .on('postgres_changes',{event:'*',schema:'public',table:'orders'},payload=>{
+      const row=payload.new||payload.old||{};
+      const mine=String(row.user_id||'')===String(userId);
+      const owner=IS_OWNER;
+      if(!mine && !owner) return;
+      if(location.hash==='#/account'){
+        loadCustomerOrders();
+      }else if(location.hash==='#/admin/orders'){
+        loadAdminOrders();
+      }else if(location.hash.startsWith('#/order/')){
+        const id=location.hash.slice('#/order/'.length).split('?')[0];
+        if(String(row.id||'')===String(id)) loadCustomerOrders().then(()=>render(true));
+      }
+    })
+    .subscribe((status,err)=>{
+      if(err) console.warn('Order realtime error:',err);
+      if(status==='CHANNEL_ERROR'||status==='TIMED_OUT') console.warn('Order realtime unavailable; polling fallback remains active.');
+    });
+}
+
 route('/account', ()=>{
  setTitle('Account');
  const wl=visibleProducts().filter(p=>state.wishlist.includes(p.id));
  if(customerOrdersRefreshTimer)clearInterval(customerOrdersRefreshTimer);
- setTimeout(()=>{loadCustomerOrders();customerOrdersRefreshTimer=setInterval(()=>{if(location.hash==='#/account')loadCustomerOrders();else{clearInterval(customerOrdersRefreshTimer);customerOrdersRefreshTimer=null;}},10000);},0);
+ setTimeout(()=>{startOrdersRealtime();loadCustomerOrders();customerOrdersRefreshTimer=setInterval(()=>{if(location.hash==='#/account')loadCustomerOrders();else{clearInterval(customerOrdersRefreshTimer);customerOrdersRefreshTimer=null;}},30000);},0);
  return `<div class="container" style="padding-top:18px;"><h1 style="font-size:1.4rem;margin:0 0 6px;">طلباتي</h1><button class="btn ghost sm" onclick="customerLogout()">تسجيل الخروج</button><div style="font-size:.78rem;color:var(--ink-dim);margin:12px 0;">تتحدث حالة الطلبات تلقائياً كل 10 ثوانٍ.</div><div id="customerOrdersList">جارٍ تحميل طلباتك…</div>${wl.length?`<h2 class="h" style="font-size:1.1rem;margin:24px 0 12px;">Wishlist</h2><div class="grid2">${wl.map(productCard).join('')}</div>`:''}</div>`;
 });
 
@@ -1715,7 +1752,7 @@ async function adminLogin(){
     nav('/admin');
   }catch(e){if(msg)msg.textContent=e.message||'تعذر تسجيل الدخول.';}
 }
-async function adminLogout(){if(window.amirSupabase)await window.amirSupabase.auth.signOut();IS_OWNER=false;nav('/home');}
+async function adminLogout(){stopOrdersRealtime();if(window.amirSupabase)await window.amirSupabase.auth.signOut();IS_OWNER=false;nav('/home');}
 
 function adminShell(active, bodyHtml){
   const links = [['/admin','Overview'],['/admin/products','Products'],['/admin/categories','Categories'],['/admin/orders','Orders'],['/admin/coupons','Coupons'],['/admin/settings','Settings']];
@@ -1957,6 +1994,7 @@ function deleteCategory(slug){
 
 route('/admin/orders', ()=>{
   setTitle('Admin · Orders');
+  startOrdersRealtime();
   const STATUSES = ['pending','confirmed','preparing','shipped','delivered','cancelled'];
   // Orders are loaded from the protected Supabase table, not just this browser's cache.
   const body = `
@@ -1989,7 +2027,7 @@ async function loadAdminOrders(){
     if(error)throw error;
     if(!orders||!orders.length){host.innerHTML='<div style="padding:18px 0;">لا توجد طلبات حتى الآن.<br><button class="btn ghost sm" style="margin-top:12px" onclick="loadAdminOrders()">تحديث القائمة</button></div>';return;}
     const ids=orders.map(o=>o.id);
-    const {data:items,itemError}=await window.amirSupabase.from('order_items').select('order_id,product_name,quantity,unit_price').in('order_id',ids);
+    const {data:items,error:itemError}=await window.amirSupabase.from('order_items').select('order_id,product_name,quantity,unit_price').in('order_id',ids);
     if(itemError)console.warn('Could not load order line items:',itemError.message);
     const byOrder={};(items||[]).forEach(it=>{(byOrder[it.order_id]||(byOrder[it.order_id]=[])).push(it);});
     host.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;"><b>عدد الطلبات: '+orders.length+'</b><button class="btn ghost sm" onclick="loadAdminOrders()">تحديث</button></div><div style="display:grid;gap:12px;">'+orders.map(o=>{
