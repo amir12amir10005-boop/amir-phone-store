@@ -1776,7 +1776,7 @@ async function sendAdminReset(){
   if(btn){btn.disabled=true;btn.textContent='جارٍ الإرسال...';}
   try{
     localStorage.setItem('amir_owner_email',email);
-    const redirectTo=location.origin+location.pathname+'#/admin/reset-password';
+    const redirectTo=location.origin+location.pathname+'?auth_recovery=1';
     const {error}=await window.amirSupabase.auth.resetPasswordForEmail(email,{redirectTo});
     if(error)throw error;
     if(msg)msg.textContent='تم إرسال رابط إعادة تعيين كلمة المرور. افحص البريد والرسائل غير المرغوب فيها.';
@@ -1797,7 +1797,7 @@ async function sendAdminReset(){
   if(!window.amirSupabase){if(msg)msg.textContent='خدمة الاستعادة غير متاحة حالياً.';return;}
   try{
     const {data:{session}}=await window.amirSupabase.auth.getSession();
-    if(!session){if(msg)msg.textContent='انتهت صلاحية رابط الاستعادة. اطلب رابطاً جديداً.';return;}
+    if(!session){if(msg)msg.textContent='انتهت صلاحية رابط الاستعادة أو لم يتم تحميل جلسة الاستعادة. اطلب رابطاً جديداً.';return;}
     const {error}=await window.amirSupabase.auth.updateUser({password:p});
     if(error)throw error;
     if(msg)msg.textContent='تم تغيير كلمة المرور بنجاح. يمكنك الآن تسجيل الدخول.';
