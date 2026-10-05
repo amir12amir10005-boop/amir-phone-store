@@ -615,7 +615,7 @@ async function verifyOwnerSession(session){
   }
   OWNER_READY=true; CUSTOMER_READY=true;
   const p=(location.hash.slice(1)||'/home').split('?')[0];
-  if(p.startsWith('/admin')||p==='/account')render(true);
+  render(true);
 })();
 function catalogSnapshot(){
   return { products:state.products, categories:state.categories,
