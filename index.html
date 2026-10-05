@@ -715,7 +715,7 @@ function render(keepScroll){
   const {path, params:qp} = parseHash();
   unmountViewer();
   if(keepScroll!==true) closeAllOverlays();
-  const customerProtected = path==='/checkout' || path==='/account' || path.startsWith('/order/');
+  const customerProtected = !path.startsWith('/admin') && path!=='/login';
   if(customerProtected){
     if(!CUSTOMER_READY){ document.getElementById('app').innerHTML='<div class="container"><div class="empty">Checking sign-in…</div></div>'; return; }
     if(!CUSTOMER_USER){ document.body.classList.remove('admin-mode'); nav('/login'); return; }
