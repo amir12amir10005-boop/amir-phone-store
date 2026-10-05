@@ -1766,7 +1766,7 @@ async function sendAdminReset(){
   const email=(document.getElementById('af_email')?.value||'').trim().toLowerCase();
   const msg=document.getElementById('resetMessage');
   if(!email){if(msg)msg.textContent='أدخل بريد المشرف.';return;}
-  if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)){if(msg)msg.textContent='أدخل بريداً إلكترونياً صحيحاً.';return;}
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){if(msg)msg.textContent='أدخل بريداً إلكترونياً صحيحاً.';return;}
   if(!window.amirSupabase){if(msg)msg.textContent='خدمة الاستعادة غير متاحة حالياً.';return;}
   try{
     localStorage.setItem('amir_owner_email',email);
