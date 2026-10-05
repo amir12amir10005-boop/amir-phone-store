@@ -598,8 +598,10 @@ async function verifyOwnerSession(session){
         }else if(CUSTOMER_USER && callback){
           history.replaceState(null,'',location.pathname);
           nav('/home');
-        }else if(p.startsWith('/admin')||p!=='/login'){
-          render(true);
+        }else{
+          // Always repaint after Supabase finishes restoring the session.
+          // This prevents the first page from staying empty until a manual refresh.
+          requestAnimationFrame(()=>{ try{ render(true); }catch(e){ console.error('Post-auth render failed:',e); } });
         }
       },0);
     });
