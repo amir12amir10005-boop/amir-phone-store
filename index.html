@@ -719,7 +719,7 @@ function render(keepScroll){
     if(!CUSTOMER_READY){ document.getElementById('app').innerHTML='<div class="container"><div class="empty">Checking sign-in…</div></div>'; return; }
     if(!CUSTOMER_USER){ document.body.classList.remove('admin-mode'); nav('/login'); return; }
   }
-  if(path.startsWith('/admin') && path!=='/admin/login'){
+  if(path.startsWith('/admin') && !['/admin/login','/admin/forgot-password','/admin/reset-password'].includes(path)){
     const appEl = document.getElementById('app');
     if(!OWNER_READY){ appEl.innerHTML = '<div class="container"><div class="empty">Checking access…</div></div>'; return; }
     if(!IS_OWNER){ document.body.classList.remove('admin-mode'); nav('/admin/login'); return; }
@@ -1739,7 +1739,7 @@ route('/admin/login', ()=>{
     <div class="field"><label>Password</label><input id="al_password" type="password" autocomplete="current-password" placeholder="كلمة مرور المشرف"></div>
     <button class="btn primary block" onclick="adminLogin()">Sign in</button>
     <div style="text-align:center;margin-top:12px;">
-      <a href="#/admin/forgot-password" id="adminForgotLink" style="background:none;border:0;color:var(--lume);cursor:pointer;text-decoration:underline;font-size:.88rem;padding:10px;display:inline-block;position:relative;z-index:5;">نسيت كلمة المرور؟</a>
+      <a href="#/admin/forgot-password" id="adminForgotLink" onclick="nav('/admin/forgot-password');return false;" style="background:none;border:0;color:var(--lume);cursor:pointer;text-decoration:underline;font-size:.88rem;padding:10px;display:inline-block;position:relative;z-index:5;">نسيت كلمة المرور؟</a>
     </div>
     <p id="authMessage" role="status" style="font-size:.8rem;margin-top:14px;"></p>
   </div>`;
