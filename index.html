@@ -1774,7 +1774,7 @@ async function sendAdminReset(){
   if(!window.amirSupabase){if(msg)msg.textContent='خدمة الاستعادة غير متاحة حالياً.';return;}
   try{
     localStorage.setItem('amir_owner_email',email);
-    const redirectTo=location.origin+location.pathname;
+    const redirectTo='https://store35.github.io/amir-phone-store/';
     const {error}=await window.amirSupabase.auth.resetPasswordForEmail(email,{redirectTo});
     if(error)throw error;
     if(msg)msg.textContent='تم إرسال رابط إعادة تعيين كلمة المرور. افحص بريدك الإلكتروني.';
