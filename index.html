@@ -717,8 +717,21 @@ function render(keepScroll){
   if(keepScroll!==true) closeAllOverlays();
   const customerProtected = !path.startsWith('/admin') && path!=='/login';
   if(customerProtected){
-    if(!CUSTOMER_READY){ document.getElementById('app').innerHTML='<div class="container"><div class="empty">Checking sign-in…</div></div>'; return; }
-    if(!CUSTOMER_USER){ document.body.classList.remove('admin-mode'); nav('/login'); return; }
+    const appEl=document.getElementById('app');
+    if(!CUSTOMER_READY){ if(appEl) appEl.innerHTML='<div class="container"><div class="empty">Checking sign-in…</div></div>'; return; }
+    if(!CUSTOMER_USER){
+      document.body.classList.remove('admin-mode');
+      const loginRoute=routes.find(r=>r.pattern==='/login');
+      try{
+        if(appEl && loginRoute) appEl.innerHTML=loginRoute.handler({},new URLSearchParams())||'';
+        location.hash='#/login';
+      }catch(e){
+        console.error('Login view render failed:',e);
+        if(appEl) appEl.innerHTML=errorView();
+      }
+      window.scrollTo(0,0);
+      return;
+    }
   }
   if(path.startsWith('/admin') && !['/admin/login','/admin/forgot-password','/admin/reset-password'].includes(path)){
     const appEl = document.getElementById('app');
