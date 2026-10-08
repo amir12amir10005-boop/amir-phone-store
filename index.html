@@ -717,24 +717,8 @@ function render(keepScroll){
   const {path, params:qp} = parseHash();
   unmountViewer();
   if(keepScroll!==true) closeAllOverlays();
-  const customerProtected = !path.startsWith('/admin') && path!=='/login';
-  if(customerProtected){
-    const appEl=document.getElementById('app');
-    if(!CUSTOMER_READY){ if(appEl) appEl.innerHTML='<div class="container"><div class="empty">Checking sign-in…</div></div>'; return; }
-    if(!CUSTOMER_USER){
-      document.body.classList.remove('admin-mode');
-      const loginRoute=routes.find(r=>r.pattern==='/login');
-      try{
-        if(appEl && loginRoute) appEl.innerHTML=loginRoute.handler({},new URLSearchParams())||'';
-        location.hash='#/login';
-      }catch(e){
-        console.error('Login view render failed:',e);
-        if(appEl) appEl.innerHTML=errorView();
-      }
-      window.scrollTo(0,0);
-      return;
-    }
-  }
+  // Customers can browse and add to cart without signing in.
+  // Authentication is requested only when they press "Confirm order".
   if(path.startsWith('/admin') && !['/admin/login','/admin/forgot-password','/admin/reset-password'].includes(path)){
     const appEl = document.getElementById('app');
     if(!OWNER_READY){ appEl.innerHTML = '<div class="container"><div class="empty">Checking access…</div></div>'; return; }
@@ -1470,7 +1454,6 @@ function couponDiscount(sub){
 }
 route('/checkout', ()=>{
   setTitle('Checkout');
-  if(!CUSTOMER_USER) return `<div class="container"><div class="empty">يجب تسجيل الدخول أولاً لإتمام الشراء وحفظ الطلبات في حسابك.<div><button class="btn primary" onclick="nav('/login')">تسجيل الدخول أو إنشاء حساب</button></div></div></div>`;
   const lines = cartLines();
   if(!lines.length) return `<div class="container"><div class="empty">Your cart is empty.<div><button class="btn primary" onclick="nav('/shop')">Browse products</button></div></div></div>`;
   const sub = cartSubtotal();
@@ -1564,6 +1547,16 @@ function checkoutStep4(sub,shipCost,disc,total,lines){
 async function confirmOrder(){
   const btn = document.getElementById('confirmBtn');
   if(!btn || btn.disabled) return;
+  if(!CUSTOMER_READY){
+    toast('جارٍ التحقق من تسجيل الدخول، حاول مرة أخرى بعد لحظة.','err');
+    return;
+  }
+  if(!CUSTOMER_USER){
+    toast('يجب تسجيل الدخول أولاً لتأكيد الشراء.','err');
+    sessionStorage.setItem('amir_pending_checkout','1');
+    nav('/login');
+    return;
+  }
   btn.disabled = true; btn.textContent = 'Placing order…';
   const lines = cartLines();
   for(const l of lines){
@@ -1735,6 +1728,7 @@ function startOrdersRealtime(){
 
 route('/account', ()=>{
  setTitle('Account');
+ if(!CUSTOMER_USER) return `<div class="container"><div class="empty">سجّل الدخول لعرض طلباتك وحسابك.<div><button class="btn primary" onclick="nav('/login')">تسجيل الدخول</button></div></div></div>`;
  const wl=visibleProducts().filter(p=>state.wishlist.includes(p.id));
  if(customerOrdersRefreshTimer)clearInterval(customerOrdersRefreshTimer);
  setTimeout(()=>{startOrdersRealtime();loadCustomerOrders();customerOrdersRefreshTimer=setInterval(()=>{if(location.hash==='#/account')loadCustomerOrders();else{clearInterval(customerOrdersRefreshTimer);customerOrdersRefreshTimer=null;}},30000);},0);
