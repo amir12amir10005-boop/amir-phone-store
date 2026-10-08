@@ -1660,11 +1660,19 @@ async function customerAuthSubmit(){
  try{
   if(customerAuthMode==='signup'){
    const {data,error}=await window.amirSupabase.auth.signUp({email,password,options:{data:{username},emailRedirectTo:'https://store35.github.io/amir-phone-store/?auth_callback=1'}}); if(error)throw error;
-   if(data.session){CUSTOMER_USER=data.user;nav('/home');}
+   if(data.session){
+    CUSTOMER_USER=data.user;
+    const pending=sessionStorage.getItem('amir_pending_checkout')==='1';
+    sessionStorage.removeItem('amir_pending_checkout');
+    nav(pending?'/checkout':'/home');
+   }
    else if(msg)msg.textContent='تم إنشاء الحساب. إذا كان تأكيد البريد مفعّلاً في إعدادات المتجر، فستحتاج إلى تأكيده قبل تسجيل الدخول.';
   }else{
    const {data,error}=await window.amirSupabase.auth.signInWithPassword({email,password});if(error)throw error;
-   CUSTOMER_USER=data.user;nav('/home');
+   CUSTOMER_USER=data.user;
+   const pending=sessionStorage.getItem('amir_pending_checkout')==='1';
+   sessionStorage.removeItem('amir_pending_checkout');
+   nav(pending?'/checkout':'/home');
   }
  }catch(e){if(msg)msg.textContent=e.message||'تعذر إتمام العملية.';}
 }
